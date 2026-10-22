@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Tldraw, atom, useValue, getSnapshot, loadSnapshot, PageRecordType, getIndexBetween,
+  DefaultToolbar, DefaultToolbarContent, TldrawUiMenuItem, useTools, useIsToolSelected,
 } from 'tldraw'
+import { LassoTool, LassoOverlay, LassoIcon } from './lasso.jsx'
 import { getAssetUrls } from '@tldraw/assets/selfHosted'
 import 'tldraw/tldraw.css'
 import 'reveal.js/dist/reveal.css'
@@ -40,6 +42,32 @@ function OnTheCanvas() {
     </div>
   )
 }
+
+function OnTheCanvasAll() {
+  return <><OnTheCanvas /><LassoOverlay /></>
+}
+
+// Toolbar: the lasso comes first, then tldraw's usual tools.
+function Toolbar(props) {
+  const tools = useTools()
+  const lassoSelected = useIsToolSelected(tools.lasso)
+  return (
+    <DefaultToolbar {...props}>
+      <TldrawUiMenuItem {...tools.lasso} isSelected={lassoSelected} />
+      <DefaultToolbarContent />
+    </DefaultToolbar>
+  )
+}
+
+const uiOverrides = {
+  tools(editor, tools) {
+    tools.lasso = { id: 'lasso', label: 'tool.lasso', icon: LassoIcon, onSelect: () => editor.setCurrentTool('lasso') }
+    return tools
+  },
+  translations: { en: { 'tool.lasso': 'Lasso select' } },
+}
+const tldrawTools = [LassoTool]
+const tldrawComponents = { PageMenu: null, OnTheCanvas: OnTheCanvasAll, Toolbar }
 
 function GhostStyle({ editor }) {
   const css = useValue('ghost-css', () => {
@@ -117,6 +145,12 @@ function StepBar({ editor }) {
       })()
     : ''
   const hasOut = selected.some((s) => outOf(s) !== undefined)
+  const selectStep = () => {
+    const ids = topShapes(editor).filter((s) => inOf(s) === step).map((s) => s.id)
+    editor.setCurrentTool('select')
+    editor.setSelectedShapes(ids)
+    if (!ids.length) setMsg(`Nothing appears at step ${step}`)
+  }
 
   return (
     <div className="sb-stepbar">
@@ -125,6 +159,7 @@ function StepBar({ editor }) {
         <span className="sb-step-label">Step <b>{step}</b><small> of {max}</small></span>
         <button type="button" onClick={() => go(step + 1)} disabled={step >= max} aria-label="Next step">›</button>
         <button type="button" className="primary" onClick={newStep}>New step</button>
+        {selected.length === 0 && <button type="button" onClick={selectStep}>Select step</button>}
       </div>
 
       <div className="sb-seg" role="radiogroup" aria-label="Board view">
@@ -295,6 +330,12 @@ function App() {
   const [textFile, setTextFile] = useState(null)
   const [importing, setImporting] = useState(false)
   const [sidebar, setSidebar] = useState(() => window.innerWidth > 820)
+  // Refit the slide when the panel opens or closes, so the board uses the freed space.
+  useEffect(() => {
+    if (!editor || !loaded.current) return
+    const t = setTimeout(() => editor.zoomToBounds(SLIDE_BOX, { inset: 24, animation: { duration: 150 } }), 60)
+    return () => clearTimeout(t)
+  }, [sidebar, editor])
   const cacheRef = useRef({})
   const nameRef = useRef(name)
   const saveTimer = useRef(null)
@@ -453,7 +494,7 @@ function App() {
   return (
     <div className={sidebar ? 'sb-app with-sidebar' : 'sb-app'}>
       <header className="sb-header">
-        <button type="button" className="sb-toggle" onClick={() => setSidebar((v) => !v)} aria-expanded={sidebar} aria-controls="sb-sidebar">Slides</button>
+        <button type="button" className="sb-toggle" onClick={() => setSidebar((v) => !v)} aria-expanded={sidebar} aria-controls="sb-sidebar">{sidebar ? 'Hide panel' : 'Show panel'}</button>
         <input id="deck-name" className="sb-name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Deck name" />
         <span className="sb-status" role="status">{status}</span>
         <div className="sb-actions">
@@ -471,7 +512,9 @@ function App() {
             assetUrls={assetUrls}
             onMount={onMount}
             getShapeVisibility={getShapeVisibility}
-            components={{ PageMenu: null, OnTheCanvas }}
+            components={tldrawComponents}
+            tools={tldrawTools}
+            overrides={uiOverrides}
           />
           <GhostStyle editor={editor} />
         </div>

@@ -55,7 +55,7 @@ button.danger { color: var(--minus); border-color: var(--minus); }
 
 .sb-stepbar { position: relative; background: var(--panel); }
 .sb-stepper { display: flex; align-items: center; gap: 6px; }
-.sb-stepper > button:not(.primary) { font-size: 18px; line-height: 1; padding: 4px 12px; }
+.sb-stepper > button[aria-label] { font-size: 18px; line-height: 1; padding: 4px 12px; }
 .sb-step-label { min-width: 7.5em; text-align: center; color: var(--muted); }
 .sb-step-label b { font: 500 18px var(--font-data); color: var(--text); font-variant-numeric: tabular-nums; }
 .sb-step-label small { font-size: 12px; }
@@ -92,6 +92,9 @@ button.danger { color: var(--minus); border-color: var(--minus); }
   position: absolute; left: 0; top: 0; pointer-events: none; border: 2px solid var(--frame); border-radius: 2px;
   box-shadow: 0 0 0 100000px rgb(120 130 125 / .08);
 }
+.sb-lasso { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.sb-lasso path { fill: rgb(47 111 143 / .08); stroke: var(--frame); stroke-width: 1.5; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
+.sb-lasso-icon { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
 .sb-slide-frame span { position: absolute; left: 0; top: -28px; font: 500 16px var(--font-data); color: var(--frame); opacity: .7; }
 
 .sb-player { position: fixed; inset: 0; z-index: 1000; background: #1b1e1f; }
