@@ -16,6 +16,7 @@ import {
 import { renderPage, SLIDE_BOX } from './render.js'
 import { present, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
 import { standaloneHtml } from './export.js'
+import { buildFromImport, IMPORT_FORMAT } from './importer.js'
 import { loadDeck, saveDeck } from './storage.js'
 
 const assetUrls = getAssetUrls({ baseUrl: './assets' })
@@ -337,7 +338,7 @@ function ImportDialog({ onFile, onClose }) {
   return (
     <dialog ref={ref} className="sb-dialog" onClose={onClose}>
       <h2>Open a deck file</h2>
-      <p>Opening a deck replaces the one stored in this browser. Save a copy of the current deck first if you want to keep it.</p>
+      <p>Choose a Stepboard deck (.stepboard.json) or a converted Keynote file (.stepboard-import.json). Opening a file replaces the deck stored in this browser, so save a copy of the current deck first if you want to keep it.</p>
       <input id="import-file" type="file" accept=".json,application/json" onChange={async (e) => {
         const f = e.target.files?.[0]
         if (!f) return
@@ -506,7 +507,27 @@ function App() {
   const importFile = async (file) => {
     let deck
     try { deck = JSON.parse(await file.text()) } catch { return 'That file is not valid JSON.' }
-    if (deck?.format !== FORMAT || !deck.tldraw) return 'That file is not a Stepboard deck.'
+    if (deck?.format === IMPORT_FORMAT) {
+      // A converted Keynote file: build the slides with the editor.
+      try {
+        loaded.current = false
+        const r = buildFromImport(editor, deck)
+        cacheRef.current = {}
+        setCache({})
+        stepsAtom.set({})
+        setName(deck.name || 'Imported deck')
+        loaded.current = true
+        editor.zoomToBounds(SLIDE_BOX, { inset: 24, immediate: true })
+        await flush(editor, editor.getPages().map((p) => p.id))
+        const summary = `Imported ${r.slides} slides, ${r.strokes} strokes, ${r.texts} text items${r.warnings.length ? ` (not converted: ${r.warnings.join(', ')})` : ''}`
+        setTimeout(() => setStatus(summary), 1500) // after the save that renaming the deck triggers
+        return ''
+      } catch (e) {
+        loaded.current = true
+        return `The converted file could not be imported (${e?.message || 'unknown error'}).`
+      }
+    }
+    if (deck?.format !== FORMAT || !deck.tldraw) return 'That file is not a Stepboard deck or a converted Keynote file.'
     try {
       loaded.current = false
       loadSnapshot(editor.store, { document: deck.tldraw })

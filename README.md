@@ -10,6 +10,8 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 - `src/export.js`    standalone HTML export with the player and reveal.js inlined (works offline)
 - `src/runtime.js`   player bundle that gets inlined into exported HTML
 - `src/present.js` + `src/present.template.html`  Stepboard Player page (present.html): open a deck file and present
+- `src/importer.js`  builds a deck from a converted Keynote file (see below)
+- `tools/key2stepboard.py`  Keynote → Stepboard converter (Python, runs on your computer)
 - `src/storage.js`   IndexedDB storage of the deck (browser only, for now)
 - `src/App.jsx`      editor UI
 - `src/lasso.jsx`    lasso select tool (custom tldraw tool via public API)
@@ -51,3 +53,17 @@ tldraw 3 has no setting for pressure response or stroke width beyond S/M/L/XL. S
 (Fine 0.3x, Thin 0.45x, Medium 0.65x, tldraw 1x) that is written into each new stroke's `props.scale`, the same prop tldraw's
 "dynamic size" mode uses, so it is saved with the stroke and exported correctly. Width - / + rescales selected strokes.
 The pressure curve itself (thinning, smoothing) is fixed inside tldraw's draw shape and would need a custom shape util to change.
+
+## Converting Keynote decks
+```
+pip install -r tools/requirements.txt          # keynote-parser, reads Keynote 14 / 15 files
+python3 tools/key2stepboard.py lecture.key      # writes lecture.stepboard-import.json
+```
+Then in Stepboard: Open file, choose `lecture.stepboard-import.json`. This replaces the deck in the browser.
+
+Converted: slides in order (skipped slides only with `--include-skipped`); pencil drawings as editable strokes with
+their width (colours go to the nearest tldraw colour, the exact one is kept in each shape's `meta.sourceColor`);
+each Keynote drawing becomes a tldraw group; text boxes and visible titles as text (approximate font and size);
+builds: In = appears at that step, Out = disappears; builds that start automatically join the previous step.
+Not converted yet: images, other shapes, tables, charts, transitions, presenter notes. Crayon/brush texture
+comes out as a solid stroke.
