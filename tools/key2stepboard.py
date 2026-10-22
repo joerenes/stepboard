@@ -1,9 +1,17 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["keynote-parser==1.14.5.0"]
+# ///
 """
 key2stepboard: convert an Apple Keynote file into a Stepboard import file.
 
-    python3 tools/key2stepboard.py lecture.key            # writes lecture.stepboard-import.json
-    python3 tools/key2stepboard.py lecture.key -o out.json
+    uv run tools/key2stepboard.py lecture.key             # writes lecture.stepboard-import.json
+    uv run tools/key2stepboard.py lecture.key -o out.json
+
+uv reads the dependency list at the top of this file and runs the script in its own cached environment,
+so nothing is installed into your system Python. (Without uv: pip install -r tools/requirements.txt,
+then python3 tools/key2stepboard.py lecture.key.)
 
 Open the result in Stepboard with "Open file"; the editor builds the slides from it.
 
@@ -16,14 +24,20 @@ What is converted
     a build set to start automatically (with / after the previous one) joins the previous step
 What is not converted (yet): images, shapes other than strokes, tables, charts, transitions, notes.
 
-Needs: pip install keynote-parser==1.14.5.0   (reads Keynote files from Keynote 14 and 15)
+Needs keynote-parser 1.14.5 (reads Keynote 14 and 15 files); uv installs it automatically.
 """
 import argparse
 import json
 import math
 import os
 import sys
+import warnings
 import zipfile
+
+# keynote-parser warns about every Keynote record it has no schema for (style patches and the like);
+# they don't affect the conversion, so they are hidden unless --verbose is given.
+if '--verbose' not in sys.argv:
+    warnings.filterwarnings('ignore')
 
 try:
     from keynote_parser.codec import IWAFile
@@ -386,6 +400,7 @@ def main():
     ap.add_argument('keynote', help='the .key file (saved as a single file)')
     ap.add_argument('-o', '--output', help='output file (default: next to the input, .stepboard-import.json)')
     ap.add_argument('--include-skipped', action='store_true', help='also convert skipped slides')
+    ap.add_argument('--verbose', action='store_true', help="show keynote-parser's warnings about unknown records")
     args = ap.parse_args()
     data = convert(args.keynote, args.include_skipped)
     out = args.output or os.path.splitext(args.keynote)[0] + '.stepboard-import.json'

@@ -55,10 +55,12 @@ tldraw 3 has no setting for pressure response or stroke width beyond S/M/L/XL. S
 The pressure curve itself (thinning, smoothing) is fixed inside tldraw's draw shape and would need a custom shape util to change.
 
 ## Converting Keynote decks
+With [uv](https://docs.astral.sh/uv/) (nothing goes into your system Python; uv reads the dependencies from
+the top of the script and keeps them in its own cached environment):
 ```
-pip install -r tools/requirements.txt          # keynote-parser, reads Keynote 14 / 15 files
-python3 tools/key2stepboard.py lecture.key      # writes lecture.stepboard-import.json
+uv run tools/key2stepboard.py lecture.key       # writes lecture.stepboard-import.json
 ```
+Without uv: `pip install -r tools/requirements.txt`, then `python3 tools/key2stepboard.py lecture.key`.
 Then in Stepboard: Open file, choose `lecture.stepboard-import.json`. This replaces the deck in the browser.
 
 Converted: slides in order (skipped slides only with `--include-skipped`); pencil drawings as editable strokes with
