@@ -31,7 +31,10 @@ Outputs: `dist/index.html`, `dist/present.html` + `dist/assets/` are the claude.
 static website with the editor at `index.html` and the player at `present.html`.
 The player can open a deck from the same server: `present.html?deck=lecture-1.stepboard.json`.
 
-Host `dist/site/` on any static host (GitHub/GitLab Pages, Netlify, Cloudflare Pages). On the iPad open it in Safari and use
+GitHub Pages: `.github/workflows/pages.yml` builds and publishes `dist/site/` on every push to `master`
+(one-time: Settings > Pages > Source: GitHub Actions). The site is then at https://joerenes.github.io/stepboard/.
+
+Or host `dist/site/` on any static host (GitHub/GitLab Pages, Netlify, Cloudflare Pages). On the iPad open it in Safari and use
 Share > Add to Home Screen: the manifest makes it open full screen as its own app.
 Test locally: `cd dist/site && python3 -m http.server 8000`, then `http://localhost:8000/` (or `http://<computer-IP>:8000/`
 from the iPad; over plain HTTP the clipboard may be refused, and Save file / Export HTML then show the text to copy).
