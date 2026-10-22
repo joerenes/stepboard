@@ -42,6 +42,8 @@ Pinned: tldraw 3.15.6, @tldraw/assets 3.15.6, react 18.3.1, reveal.js 5.1.0. Do 
 ## Presenting
 Right / Space / Page Down / tap: next build, then next slide. Left / Page Up / tap the left fifth: previous build.
 Down / Up or swipe up / down: next / previous slide, returning to the build state you left it in. F: full screen. Esc: stop.
+Laser pointer: the Pencil always shows a red dot (touching, or hovering on iPads with Pencil hover) and never navigates;
+L toggles the dot for the mouse (air-mouse presenter remotes).
 
 ## Pen width
 tldraw 3 has no setting for pressure response or stroke width beyond S/M/L/XL. Stepboard adds a Pen width multiplier

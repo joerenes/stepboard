@@ -39,6 +39,11 @@ export const PLAYER_UI_CSS = `
   font: 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: #1b1e1fd9; border-radius: 6px; padding: 7px 12px;
   white-space: nowrap; pointer-events: none; transition: opacity .4s; }
 .sb-hint.gone { opacity: 0; }
+.sb-laser { position: absolute; z-index: 30; left: 0; top: 0; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 18%, #ff2a1a 32%, rgb(255 42 26 / .55) 55%, rgb(255 42 26 / 0) 72%);
+  box-shadow: 0 0 14px 4px rgb(255 42 26 / .45); pointer-events: none; opacity: 0; transition: opacity .25s; will-change: transform; }
+.sb-laser.on { opacity: 1; transition: opacity .05s; }
+.sb-laser-mode, .sb-laser-mode * { cursor: none !important; }
 `
 
 /**
@@ -50,7 +55,8 @@ export const PLAYER_UI_CSS = `
 export function present(container, slides, startIndex = 0, onClose) {
   container.innerHTML = `<div class="reveal"><div class="slides">${slides.map((s) => slideMarkup(s.layers)).join('')}</div></div>
     ${onClose ? '<button type="button" class="sb-close" aria-label="Close presentation">Close</button>' : ''}
-    <div class="sb-hint" role="note">→ next build · ← back · ↓ ↑ change slide</div>`
+    <div class="sb-hint" role="note">→ next build · ← back · ↓ ↑ change slide · Pencil or L = laser pointer</div>
+    <div class="sb-laser" aria-hidden="true"></div>`
   const el = container.querySelector('.reveal')
   const deck = new Reveal(el, { ...REVEAL_OPTIONS, embedded: true })
   const memory = new Map() // slide index -> last shown build (-1 = none)
@@ -75,16 +81,46 @@ export function present(container, slides, startIndex = 0, onClose) {
     else if (k === 'ArrowUp') goSlide(deck.getIndices().h - 1)
     else if (k === 'Home') goSlide(0)
     else if (k === 'End') goSlide(total() - 1)
+    else if (k === 'l' || k === 'L') toggleLaser()
     else if (k === 'f') { const d = document; d.fullscreenElement ? d.exitFullscreen?.() : container.requestFullscreen?.().catch(() => {}) }
     else if ((k === 'Escape' || k === 'q') && onClose) close()
     else handled = false
     if (handled) { e.preventDefault(); e.stopPropagation() }
   }
 
-  // Touch / Pencil: tap = next build (left fifth = back), swipe left/right = builds, swipe up/down = slides.
+  // Laser pointer. The Pencil always points (touching, or hovering on iPads that support Pencil hover) and never
+  // navigates. The mouse points when laser mode is on (L key), e.g. with an "air mouse" presenter remote.
+  const laser = container.querySelector('.sb-laser')
+  let laserMode = false
+  let penDown = false
+  let fadeTimer = null
+  const laserAt = (e) => {
+    const r = container.getBoundingClientRect()
+    laser.style.transform = `translate(${e.clientX - r.left}px, ${e.clientY - r.top}px)`
+    laser.classList.add('on')
+    clearTimeout(fadeTimer)
+    if (!penDown) fadeTimer = setTimeout(() => laser.classList.remove('on'), e.pointerType === 'mouse' ? 2500 : 600)
+  }
+  const laserOff = () => { clearTimeout(fadeTimer); fadeTimer = setTimeout(() => laser.classList.remove('on'), 250) }
+  const toggleLaser = () => {
+    laserMode = !laserMode
+    container.classList.toggle('sb-laser-mode', laserMode)
+    if (!laserMode) laser.classList.remove('on')
+  }
+  const onMove = (e) => {
+    if (e.pointerType === 'pen') laserAt(e)
+    else if (e.pointerType === 'mouse' && laserMode) laserAt(e)
+  }
+
+  // Finger / mouse: tap = next build (left fifth = back), swipe left/right = builds, swipe up/down = slides.
   let down = null
-  const onDown = (e) => { if (!e.target.closest('button')) down = { x: e.clientX, y: e.clientY } }
+  const onDown = (e) => {
+    if (e.target.closest('button')) return
+    if (e.pointerType === 'pen') { penDown = true; laserAt(e); return }
+    down = { x: e.clientX, y: e.clientY }
+  }
   const onUp = (e) => {
+    if (e.pointerType === 'pen') { penDown = false; laserOff(); return }
     if (!down) return
     const dx = e.clientX - down.x, dy = e.clientY - down.y
     down = null
@@ -110,6 +146,9 @@ export function present(container, slides, startIndex = 0, onClose) {
   window.addEventListener('keydown', onKey, true)
   el.addEventListener('pointerdown', onDown)
   el.addEventListener('pointerup', onUp)
+  el.addEventListener('pointercancel', (e) => { if (e.pointerType === 'pen') { penDown = false; laserOff() } down = null })
+  container.addEventListener('pointermove', onMove)
+  container.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'pen' || !penDown) laser.classList.remove('on') })
   el.style.touchAction = 'none'
   container.querySelector('.sb-close')?.addEventListener('click', close)
   setTimeout(() => container.querySelector('.sb-hint')?.classList.add('gone'), 3500)
