@@ -12,6 +12,11 @@ let slides = null
 let title = ''
 
 function show(deck, source) {
+  if (deck?.format === 'stepboard-import') {
+    setError('This is a converted Keynote file, which the editor still has to turn into slides. Open it in the editor (Open file), then use Save file there, and open the saved .stepboard.json here.')
+    $('open-editor').hidden = false
+    return
+  }
   if (deck?.format !== 'stepboard-deck' || !Array.isArray(deck.slides)) {
     setError('That file is not a Stepboard deck.')
     return
@@ -26,6 +31,7 @@ function show(deck, source) {
   $('deck-warn').textContent = missing ? `${missing} slide${missing === 1 ? ' is' : 's are'} blank. Open the deck in the editor and save it again to refresh the slide pictures.` : ''
   $('loaded').hidden = false
   $('error').hidden = true
+  $('open-editor').hidden = true
   document.title = `${title} · Stepboard Player`
 }
 

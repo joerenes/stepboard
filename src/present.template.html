@@ -39,7 +39,8 @@ label.file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px;
 #deck-name { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
 #deck-meta { color: var(--muted); font: 13px var(--font-data); }
 #deck-warn { color: var(--warn); margin: 0; }
-#error { color: var(--error); margin: 0; }
+#error { color: var(--error); margin: 0; max-width: 56ch; }
+.file-link { color: var(--accent); font-weight: 700; }
 button.primary { font: 700 16px var(--font-ui); background: var(--accent); color: var(--on-accent); border: 0; border-radius: 8px; padding: 11px 18px; cursor: pointer; align-self: flex-start; }
 button.primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .keys { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; color: var(--muted); }
@@ -56,6 +57,7 @@ button.primary:focus-visible { outline: 2px solid var(--accent); outline-offset:
       <div><label class="file">Choose deck file<input id="file" type="file" accept=".json,application/json"></label></div>
     </div>
     <p id="error" role="alert" hidden></p>
+    <a id="open-editor" class="file-link" href="./" hidden>Open the editor</a>
     <section id="loaded" hidden aria-live="polite">
       <div id="deck-name"></div>
       <div id="deck-meta"></div>
