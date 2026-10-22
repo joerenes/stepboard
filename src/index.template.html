@@ -65,7 +65,10 @@ button.danger { color: var(--minus); border-color: var(--minus); }
 .sb-seg button.on { background: var(--accent); color: var(--on-accent); }
 .sb-selection { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-left: 10px; border-left: 1px solid var(--line); }
 .sb-sel-info { color: var(--muted); font-size: 12px; }
-.sb-fit { margin-left: auto; }
+.sb-icon { font-size: 17px; line-height: 1; min-width: 34px; padding: 4px 8px; }
+.sb-pen { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.sb-pen select { font: 700 13px var(--font-ui); color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-height: 32px; }
+.sb-pen select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sb-toast { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); top: calc(100% + 8px); z-index: 600; background: var(--text); color: var(--bg); padding: 6px 10px; border-radius: 6px; font-size: 13px; pointer-events: none; }
 
 .sb-body { display: grid; grid-template-columns: 1fr; min-height: 0; }

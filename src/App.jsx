@@ -25,6 +25,15 @@ const FORMAT = 'stepboard-deck'
 const stepsAtom = atom('steps', {})         // pageId -> current step
 const viewAtom = atom('view', 'ghost')       // 'ghost' | 'audience' | 'all'
 
+// Pen width: a multiplier on tldraw's stroke width for new pen strokes, stored per shape in props.scale
+// (the same prop tldraw's "dynamic size" uses), so it survives saving, export and presenting.
+const PEN_WIDTHS = [[0.3, 'Fine'], [0.45, 'Thin'], [0.65, 'Medium'], [1, 'tldraw']]
+const readPenWidth = () => { try { const v = parseFloat(localStorage.getItem('stepboard.penWidth')); return PEN_WIDTHS.some(([w]) => w === v) ? v : 0.45 } catch { return 0.45 } }
+const penWidthAtom = atom('pen width', readPenWidth())
+const setPenWidth = (v) => { penWidthAtom.set(v); try { localStorage.setItem('stepboard.penWidth', String(v)) } catch {} }
+const isFreshStroke = (shape) => (shape.type === 'draw' || shape.type === 'highlight') && !shape.props?.isComplete &&
+  shape.props?.segments?.length === 1 && shape.props.segments[0].points?.length === 1
+
 const stepOf = (editor, pageId = editor.getCurrentPageId()) => stepsAtom.get()[pageId] ?? 0
 const setStep = (pageId, s) => stepsAtom.update((m) => ({ ...m, [pageId]: Math.max(0, s) }))
 
@@ -107,6 +116,19 @@ async function offerFile(filename, data, fallback) {
   } catch (e) {
     if (e?.code === 'declined') return 'declined'
   }
+  // On your own website (outside claude.ai): a normal browser download. On the iPad, Safari asks to
+  // download and the file lands in Files > Downloads.
+  if (!window.claude) {
+    try {
+      const blob = new Blob([data], { type: filename.endsWith('.html') ? 'text/html' : 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = filename; a.style.display = 'none'
+      document.body.append(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30000)
+      return 'saved'
+    } catch {}
+  }
   fallback(filename, data)
   return 'fallback'
 }
@@ -146,6 +168,11 @@ function StepBar({ editor }) {
       })()
     : ''
   const hasOut = selected.some((s) => outOf(s) !== undefined)
+  const penWidth = useValue('pen width', () => penWidthAtom.get(), [])
+  const strokes = useValue('sel strokes', () => editor.getSelectedShapes().flatMap((s) =>
+    s.type === 'group' ? editor.getSortedChildIdsForParent(s.id).map((id) => editor.getShape(id)) : [s]
+  ).filter((s) => s && (s.type === 'draw' || s.type === 'highlight')), [editor])
+  const reweight = (f) => editor.updateShapes(strokes.map((s) => ({ id: s.id, type: s.type, props: { scale: Math.max(0.05, s.props.scale * f) } })))
   const selectStep = () => {
     const ids = topShapes(editor).filter((s) => inOf(s) === step).map((s) => s.id)
     editor.setCurrentTool('select')
@@ -175,9 +202,19 @@ function StepBar({ editor }) {
           <button type="button" onClick={appearHere}>Appear here</button>
           <button type="button" onClick={hideHere}>Hide from here</button>
           {hasOut && <button type="button" onClick={showAgain}>Keep visible</button>}
+          {strokes.length > 0 && <>
+            <span className="sb-sel-info">Width</span>
+            <button type="button" className="sb-icon" onClick={() => reweight(0.8)} aria-label="Make selected strokes thinner">−</button>
+            <button type="button" className="sb-icon" onClick={() => reweight(1.25)} aria-label="Make selected strokes thicker">+</button>
+          </>}
         </div>
       )}
-      <button type="button" className="sb-fit" onClick={() => editor.zoomToBounds(SLIDE_BOX, { inset: 24, animation: { duration: 200 } })}>Fit slide</button>
+      <label className="sb-pen">Pen
+        <select id="pen-width" value={penWidth} onChange={(e) => setPenWidth(parseFloat(e.target.value))}>
+          {PEN_WIDTHS.map(([w, label]) => <option key={w} value={w}>{label}</option>)}
+        </select>
+      </label>
+      <button type="button" className="sb-fit" onClick={() => editor.zoomToBounds(SLIDE_BOX, { inset: 24, animation: { duration: 200 } })} aria-label="Fit slide">Fit</button>
       {msg && <span className="sb-toast" role="status">{msg}</span>}
     </div>
   )
@@ -379,10 +416,13 @@ function App() {
 
   const onMount = useCallback((ed) => {
     setEditor(ed)
+    window.__stepboardEditor = ed // for debugging from the browser console
     ed.user.updateUserPreferences({ colorScheme: 'system' })
 
     // Blackboard mode: anything new belongs to the current step.
     ed.sideEffects.registerBeforeCreateHandler('shape', (shape) => {
+      // A stroke that is just starting gets the chosen pen width (pasted or duplicated strokes keep theirs).
+      if (isFreshStroke(shape)) shape = { ...shape, props: { ...shape.props, scale: (shape.props.scale ?? 1) * penWidthAtom.get() } }
       if (Number.isInteger(shape.meta?.in)) return shape
       return { ...shape, meta: { ...shape.meta, in: stepOf(ed, shape.parentId?.startsWith('page:') ? shape.parentId : ed.getCurrentPageId()) } }
     })

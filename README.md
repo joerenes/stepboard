@@ -42,3 +42,9 @@ Pinned: tldraw 3.15.6, @tldraw/assets 3.15.6, react 18.3.1, reveal.js 5.1.0. Do 
 ## Presenting
 Right / Space / Page Down / tap: next build, then next slide. Left / Page Up / tap the left fifth: previous build.
 Down / Up or swipe up / down: next / previous slide, returning to the build state you left it in. F: full screen. Esc: stop.
+
+## Pen width
+tldraw 3 has no setting for pressure response or stroke width beyond S/M/L/XL. Stepboard adds a Pen width multiplier
+(Fine 0.3x, Thin 0.45x, Medium 0.65x, tldraw 1x) that is written into each new stroke's `props.scale`, the same prop tldraw's
+"dynamic size" mode uses, so it is saved with the stroke and exported correctly. Width - / + rescales selected strokes.
+The pressure curve itself (thinning, smoothing) is fixed inside tldraw's draw shape and would need a custom shape util to change.
