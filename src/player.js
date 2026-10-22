@@ -28,45 +28,96 @@ export const PLAYER_CSS = `
 
 export const REVEAL_OPTIONS = {
   width: SLIDE_W, height: SLIDE_H, margin: 0.02, center: false, hash: false,
-  transition: 'none', backgroundTransition: 'none', controls: true, progress: true, slideNumber: 'c/t',
+  transition: 'none', backgroundTransition: 'none', controls: false, progress: true, slideNumber: 'c/t',
+  keyboard: false, touch: false, // navigation is handled below
 }
 
-/** Present inside the editor. Returns a function that closes the player. */
-export function present(container, slides, startIndex, onClose) {
+export const PLAYER_UI_CSS = `
+.sb-close { position: absolute; z-index: 20; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+  font: 700 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: #1b1e1fcc; border: 1px solid #4a5558; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.sb-hint { position: absolute; z-index: 20; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  font: 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: #1b1e1fd9; border-radius: 6px; padding: 7px 12px;
+  white-space: nowrap; pointer-events: none; transition: opacity .4s; }
+.sb-hint.gone { opacity: 0; }
+`
+
+/**
+ * Present slides in `container`.
+ * Right / Space / Page Down / tap: next build (then next slide).  Left / Page Up / tap on the left edge: previous build.
+ * Down / Up (or swipe up / down): next / previous slide, returning to the build state you left it in.
+ * Returns a function that closes the player.
+ */
+export function present(container, slides, startIndex = 0, onClose) {
   container.innerHTML = `<div class="reveal"><div class="slides">${slides.map((s) => slideMarkup(s.layers)).join('')}</div></div>
-    <button type="button" class="sb-close" aria-label="Close presentation">Close</button>`
+    ${onClose ? '<button type="button" class="sb-close" aria-label="Close presentation">Close</button>' : ''}
+    <div class="sb-hint" role="note">→ next build · ← back · ↓ ↑ change slide</div>`
   const el = container.querySelector('.reveal')
-  const deck = new Reveal(el, { ...REVEAL_OPTIONS, embedded: true, keyboard: { 27: () => close(), 81: () => close() } })
+  const deck = new Reveal(el, { ...REVEAL_OPTIONS, embedded: true })
+  const memory = new Map() // slide index -> last shown build (-1 = none)
   let closed = false
+
+  const remember = () => { const { h, f } = deck.getIndices(); memory.set(h, f ?? -1) }
+  const total = () => deck.getTotalSlides()
+  const goSlide = (i) => {
+    if (i < 0 || i >= total()) return
+    deck.slide(i, 0, memory.has(i) ? memory.get(i) : -1)
+  }
+  const nextBuild = () => { if (deck.availableFragments().next) deck.nextFragment(); else goSlide(deck.getIndices().h + 1) }
+  const prevBuild = () => { if (deck.availableFragments().prev) deck.prevFragment(); else goSlide(deck.getIndices().h - 1) }
+
+  const onKey = (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return
+    const k = e.key
+    let handled = true
+    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'n') nextBuild()
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'p') prevBuild()
+    else if (k === 'ArrowDown') goSlide(deck.getIndices().h + 1)
+    else if (k === 'ArrowUp') goSlide(deck.getIndices().h - 1)
+    else if (k === 'Home') goSlide(0)
+    else if (k === 'End') goSlide(total() - 1)
+    else if (k === 'f') { const d = document; d.fullscreenElement ? d.exitFullscreen?.() : container.requestFullscreen?.().catch(() => {}) }
+    else if ((k === 'Escape' || k === 'q') && onClose) close()
+    else handled = false
+    if (handled) { e.preventDefault(); e.stopPropagation() }
+  }
+
+  // Touch / Pencil: tap = next build (left fifth = back), swipe left/right = builds, swipe up/down = slides.
+  let down = null
+  const onDown = (e) => { if (!e.target.closest('button')) down = { x: e.clientX, y: e.clientY } }
+  const onUp = (e) => {
+    if (!down) return
+    const dx = e.clientX - down.x, dy = e.clientY - down.y
+    down = null
+    const dist = Math.hypot(dx, dy)
+    if (dist < 12) {
+      const r = el.getBoundingClientRect()
+      if (e.clientX - r.left < r.width / 5) prevBuild(); else nextBuild()
+    } else if (dist > 40) {
+      if (Math.abs(dx) > Math.abs(dy)) (dx < 0 ? nextBuild : prevBuild)()
+      else goSlide(deck.getIndices().h + (dy < 0 ? 1 : -1))
+    }
+  }
+
   function close() {
     if (closed) return
     closed = true
+    window.removeEventListener('keydown', onKey, true)
     try { deck.destroy() } catch {}
     container.innerHTML = ''
     onClose && onClose()
   }
-  container.querySelector('.sb-close').addEventListener('click', close)
-  // Tap on the board (Pencil or finger) advances, like a clicker.
-  el.addEventListener('click', (e) => { if (!e.target.closest('.controls, .progress, button')) deck.next() })
-  deck.initialize().then(() => { deck.slide(Math.max(0, startIndex)); el.focus?.() })
-  return close
-}
 
-/** A standalone HTML file that loads reveal.js from a CDN. */
-export function standaloneHtml(title, slides) {
-  const v = '5.1.0'
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)}</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@${v}/dist/reveal.css">
-<style>html,body{background:#222}${PLAYER_CSS}</style>
-</head><body>
-<div class="reveal"><div class="slides">
-${slides.map((s) => slideMarkup(s.layers)).join('\n')}
-</div></div>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@${v}/dist/reveal.js"></script>
-<script>Reveal.initialize(${JSON.stringify({ ...REVEAL_OPTIONS, hash: true })});</script>
-</body></html>
-`
+  window.addEventListener('keydown', onKey, true)
+  el.addEventListener('pointerdown', onDown)
+  el.addEventListener('pointerup', onUp)
+  el.style.touchAction = 'none'
+  container.querySelector('.sb-close')?.addEventListener('click', close)
+  setTimeout(() => container.querySelector('.sb-hint')?.classList.add('gone'), 3500)
+
+  deck.initialize().then(() => {
+    for (const ev of ['slidechanged', 'fragmentshown', 'fragmenthidden']) deck.on(ev, remember)
+    deck.slide(Math.min(Math.max(0, startIndex), total() - 1), 0, -1)
+    remember()
+  })
+  return close
 }

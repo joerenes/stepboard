@@ -14,7 +14,8 @@ import {
   setIn, setOut, clearOut, mapSteps, insertAfter, removeStep, swapSteps,
 } from './model.js'
 import { renderPage, SLIDE_BOX } from './render.js'
-import { present, standaloneHtml, PLAYER_CSS } from './player.js'
+import { present, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
+import { standaloneHtml } from './export.js'
 import { loadDeck, saveDeck } from './storage.js'
 
 const assetUrls = getAssetUrls({ baseUrl: './assets' })
@@ -522,7 +523,7 @@ function App() {
       {presenting && <div className="sb-player" ref={playerRef} />}
       {textFile && <TextDialog data={textFile} onClose={() => setTextFile(null)} />}
       {importing && <ImportDialog onFile={importFile} onClose={() => setImporting(false)} />}
-      <style>{PLAYER_CSS}</style>
+      <style>{PLAYER_CSS + PLAYER_UI_CSS}</style>
     </div>
   )
 }

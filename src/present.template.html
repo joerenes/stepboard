@@ -1,0 +1,75 @@
+<title>Stepboard Player</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/*VENDOR_CSS*/
+</style>
+<style>
+/* Layout: one centred card to open a deck; presenting takes over the whole screen. */
+:root {
+  --bg: #eef0ec; --panel: #f7f8f5; --line: #d3d8d0; --text: #1c2a30; --muted: #5b6965;
+  --accent: #2f6f8f; --on-accent: #ffffff; --warn: #9a5b12; --error: #b3401f;
+  --font-ui: "Atkinson Hyperlegible", system-ui, -apple-system, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #161d1f; --panel: #1c2528; --line: #2e3c3f; --text: #e3e9e1; --muted: #93a39d;
+  --accent: #7fb8d4; --on-accent: #10181b; --warn: #e3b26a; --error: #ff8a65; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #161d1f; --panel: #1c2528; --line: #2e3c3f; --text: #e3e9e1; --muted: #93a39d;
+  --accent: #7fb8d4; --on-accent: #10181b; --warn: #e3b26a; --error: #ff8a65; color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--text); font: 15px/1.5 var(--font-ui); margin: 0; }
+main {
+  min-height: 100%; box-sizing: border-box; display: grid; place-items: center;
+  padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card { width: min(520px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+h1 { margin: 0; font-size: 22px; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 52ch; }
+#drop { border: 2px dashed var(--line); border-radius: 10px; padding: 22px 16px; text-align: center; color: var(--muted); }
+#drop.over { border-color: var(--accent); color: var(--accent); }
+label.file { display: inline-block; margin-top: 8px; font-weight: 700; color: var(--accent); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; }
+label.file:hover { border-color: var(--accent); }
+label.file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+#file { position: absolute; opacity: 0; width: 1px; height: 1px; }
+#loaded { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
+#deck-name { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+#deck-meta { color: var(--muted); font: 13px var(--font-data); }
+#deck-warn { color: var(--warn); margin: 0; }
+#error { color: var(--error); margin: 0; }
+button.primary { font: 700 16px var(--font-ui); background: var(--accent); color: var(--on-accent); border: 0; border-radius: 8px; padding: 11px 18px; cursor: pointer; align-self: flex-start; }
+button.primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.keys { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.keys kbd { font: 12px var(--font-data); color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+#stage { position: fixed; inset: 0; z-index: 100; background: #1b1e1f; }
+#stage .reveal { position: absolute; inset: 0; }
+</style>
+<main>
+  <div class="card">
+    <h1>Stepboard Player</h1>
+    <p class="lede">Open a deck saved from the Stepboard editor and present it. The deck stays on this device; nothing is uploaded.</p>
+    <div id="drop">
+      Drop a <b>.stepboard.json</b> file here
+      <div><label class="file">Choose deck file<input id="file" type="file" accept=".json,application/json"></label></div>
+    </div>
+    <p id="error" role="alert" hidden></p>
+    <section id="loaded" hidden aria-live="polite">
+      <div id="deck-name"></div>
+      <div id="deck-meta"></div>
+      <p id="deck-warn" hidden></p>
+      <button id="present" class="primary" type="button">Present</button>
+    </section>
+    <ul class="keys" aria-label="Controls while presenting">
+      <li><kbd>→</kbd> <kbd>Space</kbd> or tap</li><li>next build, then next slide</li>
+      <li><kbd>←</kbd> or tap left edge</li><li>previous build</li>
+      <li><kbd>↓</kbd> <kbd>↑</kbd> or swipe</li><li>next / previous slide, at the build you left it</li>
+      <li><kbd>F</kbd> · <kbd>Esc</kbd></li><li>full screen · stop presenting</li>
+    </ul>
+  </div>
+</main>
+<div id="stage" hidden></div>
+<script>/*BUNDLE*/</script>
