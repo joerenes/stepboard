@@ -1,11 +1,9 @@
-// Builds Stepboard.
-//   dist/index.html, dist/present.html  + dist/assets/   claude.ai artifact builds (no document skeleton)
-//   dist/site/                                            complete static website (editor at index.html, player at present.html)
+// Builds Stepboard into dist/: a complete static website (editor at index.html, player at present.html).
 import { build } from 'esbuild'
 import { readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs'
 
 rmSync('dist', { recursive: true, force: true })
-mkdirSync('dist/site', { recursive: true })
+mkdirSync('dist', { recursive: true })
 
 const common = {
   bundle: true, minify: true, format: 'iife', write: false, outdir: 'out',
@@ -32,16 +30,13 @@ const pl = await build({ ...common, entryPoints: ['src/present.js'], define: def
 const playerHtml = readFileSync('src/present.template.html', 'utf8')
   .replace('/*VENDOR_CSS*/', () => pick(pl, '.css')).replace('/*BUNDLE*/', () => scriptSafe(pick(pl, '.js')))
 
-writeFileSync('dist/index.html', editorHtml)
-writeFileSync('dist/present.html', playerHtml)
-
+// tldraw's fonts, icons and translations, served next to the page.
 const a = 'node_modules/@tldraw/assets'
 for (const d of ['fonts', 'translations', 'embed-icons']) cpSync(`${a}/${d}`, `dist/assets/${d}`, { recursive: true })
 mkdirSync('dist/assets/icons/icon', { recursive: true })
 cpSync(`${a}/icons/icon/0_merged.svg`, 'dist/assets/icons/icon/0_merged.svg')
-cpSync('LICENSES/tldraw-3.15.6-LICENSE.md', 'dist/TLDRAW-LICENSE.md')
 
-// Static website. The manifest makes "Add to Home Screen" on the iPad open the editor full screen.
+// Pages. The manifest makes "Add to Home Screen" on the iPad open the editor full screen.
 const head = (extra = '') => [
   '<meta charset="utf-8">',
   '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">',
@@ -53,10 +48,9 @@ const head = (extra = '') => [
   '<style>html,body{margin:0}</style>',
 ].join('')
 const page = (h, body) => `<!doctype html><html lang="en"><head>${h}</head><body>${body}</body></html>`
-writeFileSync('dist/site/index.html', page(head('<meta name="apple-mobile-web-app-title" content="Stepboard"><link rel="manifest" href="manifest.webmanifest">'), editorHtml))
-writeFileSync('dist/site/present.html', page(head('<meta name="apple-mobile-web-app-title" content="Stepboard Player">'), playerHtml))
-cpSync('dist/assets', 'dist/site/assets', { recursive: true })
-cpSync('static', 'dist/site', { recursive: true })
-cpSync('LICENSES/tldraw-3.15.6-LICENSE.md', 'dist/site/TLDRAW-LICENSE.md')
+writeFileSync('dist/index.html', page(head('<meta name="apple-mobile-web-app-title" content="Stepboard"><link rel="manifest" href="manifest.webmanifest">'), editorHtml))
+writeFileSync('dist/present.html', page(head('<meta name="apple-mobile-web-app-title" content="Stepboard Player">'), playerHtml))
+cpSync('static', 'dist', { recursive: true })
+cpSync('LICENSES/tldraw-3.15.6-LICENSE.md', 'dist/TLDRAW-LICENSE.md')
 
 console.log('editor', (editorHtml.length / 1e6).toFixed(2), 'MB · player', (playerHtml.length / 1e3).toFixed(0), 'KB · runtime', (runtime.length / 1e3).toFixed(0), 'KB')

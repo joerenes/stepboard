@@ -25,19 +25,17 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 ```
 
 ## Build
-`npm install && node build.mjs` -> `dist/index.html` (for claude.ai), `dist/local.html` (standalone), `dist/assets/`, tldraw license.
-
-Outputs: `dist/index.html`, `dist/present.html` + `dist/assets/` are the claude.ai artifact builds; `dist/site/` is a complete
-static website with the editor at `index.html` and the player at `present.html`.
+`npm install && node build.mjs` -> `dist/`, a complete static website: the editor at `index.html`, the player at
+`present.html`, tldraw's assets, the home-screen manifest and icons, and the tldraw license.
 The player can open a deck from the same server: `present.html?deck=lecture-1.stepboard.json`.
 
-GitHub Pages: `.github/workflows/pages.yml` builds and publishes `dist/site/` on every push to `master`
+GitHub Pages: `.github/workflows/pages.yml` builds and publishes `dist/` on every push to `master`
 (one-time: Settings > Pages > Source: GitHub Actions). The site is then at https://joerenes.github.io/stepboard/.
 
-Or host `dist/site/` on any static host (GitHub/GitLab Pages, Netlify, Cloudflare Pages). On the iPad open it in Safari and use
+Or host `dist/` on any static host (ETH public_html, GitLab Pages, Netlify, ...). On the iPad open it in Safari and use
 Share > Add to Home Screen: the manifest makes it open full screen as its own app.
-Test locally: `cd dist/site && python3 -m http.server 8000`, then `http://localhost:8000/` (or `http://<computer-IP>:8000/`
-from the iPad; over plain HTTP the clipboard may be refused, and Save file / Export HTML then show the text to copy).
+Test locally: `cd dist && python3 -m http.server 8000`, then `http://localhost:8000/` (or `http://<computer-IP>:8000/`
+from the iPad; over plain HTTP the clipboard may be refused).
 Browser storage is per address: use Save file / Open file to move a deck between addresses.
 
 Pinned: tldraw 3.15.6, @tldraw/assets 3.15.6, react 18.3.1, reveal.js 5.1.0. Do not upgrade tldraw past 3.x.

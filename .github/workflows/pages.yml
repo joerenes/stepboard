@@ -1,4 +1,4 @@
-# Builds Stepboard and publishes dist/site/ to GitHub Pages on every push to master.
+# Builds Stepboard and publishes dist/ to GitHub Pages on every push to master.
 # One-time setup: repository Settings > Pages > Build and deployment > Source: "GitHub Actions".
 name: Deploy site
 
@@ -28,7 +28,7 @@ jobs:
       - run: node build.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/site
+          path: dist
 
   deploy:
     needs: build

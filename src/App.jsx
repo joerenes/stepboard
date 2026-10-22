@@ -109,26 +109,18 @@ function updateMeta(editor, shapes, fn) {
 
 function fmtTime(d) { return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
 
+// A normal browser download. On the iPad, Safari asks to download and the file lands in Files > Downloads.
+// If the browser refuses, the contents are shown for copying instead.
 async function offerFile(filename, data, fallback) {
   try {
-    const dl = await window.claude?.use?.('downloads')
-    if (dl) { await dl.save({ filename, data }); return 'saved' }
-  } catch (e) {
-    if (e?.code === 'declined') return 'declined'
-  }
-  // On your own website (outside claude.ai): a normal browser download. On the iPad, Safari asks to
-  // download and the file lands in Files > Downloads.
-  if (!window.claude) {
-    try {
-      const blob = new Blob([data], { type: filename.endsWith('.html') ? 'text/html' : 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = filename; a.style.display = 'none'
-      document.body.append(a); a.click(); a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 30000)
-      return 'saved'
-    } catch {}
-  }
+    const blob = new Blob([data], { type: filename.endsWith('.html') ? 'text/html' : 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.style.display = 'none'
+    document.body.append(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
+    return 'saved'
+  } catch {}
   fallback(filename, data)
   return 'fallback'
 }
@@ -331,7 +323,7 @@ function TextDialog({ data, onClose }) {
   return (
     <dialog ref={ref} className="sb-dialog" onClose={onClose}>
       <h2>{data.filename}</h2>
-      <p>Saving files isn't available here. Copy the text and save it as <b>{data.filename}</b>.</p>
+      <p>This browser didn't allow the download. Copy the text and save it as <b>{data.filename}</b>.</p>
       <textarea readOnly value={data.text} spellCheck="false" aria-label="File contents" />
       <div className="sb-row end"><button type="button" className="primary" onClick={copy}>{label}</button><button type="button" onClick={() => ref.current.close()}>Close</button></div>
     </dialog>
