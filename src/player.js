@@ -54,8 +54,8 @@ export const PLAYER_UI_CSS = `
 .sb-show-number .reveal .slide-number { opacity: 1; }
 .sb-overview { position: absolute; inset: 0; z-index: 40; overflow-y: auto; background: #1b1e1f; -webkit-overflow-scrolling: touch;
   padding-block: calc(24px + env(safe-area-inset-top, 0px)) 40px; }
-.sb-ov-list { display: flex; flex-direction: column; align-items: center; gap: 22px; margin: 0; padding: 0 16px; list-style: none; }
-.sb-ov-list > li { width: min(920px, 100%); }
+.sb-ov-list { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 0; padding: 0 16px; list-style: none; }
+.sb-ov-list > li { width: min(460px, 100%); }
 .sb-ov-item { display: grid; grid-template-columns: 2.5em minmax(0, 1fr); align-items: start; gap: 10px; width: 100%;
   background: none; border: 0; padding: 0; cursor: pointer; color: #93a39d; font: 600 15px ui-monospace, Menlo, monospace; text-align: right; }
 .sb-ov-board { position: relative; aspect-ratio: 16 / 9; background: #fff; border-radius: 3px; overflow: hidden; outline: 3px solid transparent; outline-offset: 3px; }
@@ -63,7 +63,7 @@ export const PLAYER_UI_CSS = `
 .sb-ov-item.current .sb-ov-board { outline-color: #7fb8d4; }
 .sb-ov-item.current { color: #e3e9e1; }
 .sb-ov-item:focus-visible .sb-ov-board { outline-color: #e3e9e1; }
-.sb-ov-head { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; width: min(920px, 100%);
+.sb-ov-head { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; width: min(460px, 100%);
   margin: 0 auto 14px; padding: 8px 16px; box-sizing: border-box; color: #93a39d; font: 13px system-ui, -apple-system, sans-serif;
   background: #1b1e1f; z-index: 1; }
 .sb-ov-item:focus { outline: none; }
