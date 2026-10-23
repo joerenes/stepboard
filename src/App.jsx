@@ -397,6 +397,14 @@ function App() {
   }, [deckObject])
 
   const dirty = useRef(new Set())
+  // Slides whose pictures are out of date: edited since the last save, or never rendered.
+  // Rendering only these keeps Present / Save file / Export quick on big decks.
+  const pendingPages = (ed) => {
+    const ids = new Set(dirty.current)
+    dirty.current.clear()
+    for (const p of ed.getPages()) if (!cacheRef.current[p.id]) ids.add(p.id)
+    return [...ids].filter((id) => ed.getPage(id))
+  }
   const scheduleSave = useCallback((ed, pageId) => {
     if (pageId) dirty.current.add(pageId)
     setStatus('Saving…')
@@ -474,7 +482,7 @@ function App() {
   const startPresenting = async () => {
     if (!editor) return
     clearTimeout(saveTimer.current)
-    await flush(editor, editor.getPages().map((p) => p.id))
+    await flush(editor, pendingPages(editor))
     editor.selectNone()
     editor.blur() // keep tldraw's shortcuts (arrow keys nudge shapes) out of the presentation
     setPresenting(true)
@@ -493,13 +501,13 @@ function App() {
 
   const saveFile = async () => {
     clearTimeout(saveTimer.current)
-    await flush(editor, editor.getPages().map((p) => p.id))
+    await flush(editor, pendingPages(editor))
     const r = await offerFile(`${fileBase}.stepboard.json`, JSON.stringify(deckObject(editor)), (filename, text) => setTextFile({ filename, text }))
     if (r === 'saved') setStatus(`Deck file saved · ${fmtTime(new Date())}`)
   }
   const exportHtml = async () => {
     clearTimeout(saveTimer.current)
-    await flush(editor, editor.getPages().map((p) => p.id))
+    await flush(editor, pendingPages(editor))
     const slides = editor.getPages().map((p) => ({ layers: cacheRef.current[p.id] || [] }))
     const r = await offerFile(`${fileBase}.html`, standaloneHtml(name, slides), (filename, text) => setTextFile({ filename, text }))
     if (r === 'saved') setStatus(`Slides exported · ${fmtTime(new Date())}`)
@@ -537,7 +545,7 @@ function App() {
       setName(deck.name || 'Untitled deck')
       loaded.current = true
       editor.zoomToBounds(SLIDE_BOX, { inset: 24, immediate: true })
-      await flush(editor, editor.getPages().map((p) => p.id))
+      await flush(editor, pendingPages(editor))
       return ''
     } catch (e) {
       loaded.current = true

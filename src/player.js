@@ -5,10 +5,13 @@ import { SLIDE_W, SLIDE_H } from './model.js'
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
+const svgUrl = (svg) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+
 export function slideMarkup(layers) {
   const parts = layers.map((l) => {
-    // SVGs go in <img> so their internal ids and styles can't collide between layers.
-    let inner = `<div class="sb-layer"><img alt="" draggable="false" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(l.svg)}"></div>`
+    // SVGs go in <img> so their internal ids and styles can't collide between layers. They use data-src, so
+    // reveal.js only decodes the slides near the current one (its lazy loading), which keeps big decks quick.
+    let inner = `<div class="sb-layer"><img alt="" draggable="false" data-src="${svgUrl(l.svg)}"></div>`
     if (l.out !== undefined) inner = `<div class="sb-layer fragment fade-out" data-fragment-index="${l.out}">${inner}</div>`
     if (l.in > 0) inner = `<div class="sb-layer fragment" data-fragment-index="${l.in}">${inner}</div>`
     return inner
@@ -33,8 +36,30 @@ export const REVEAL_OPTIONS = {
 }
 
 export const PLAYER_UI_CSS = `
-.sb-close { position: absolute; z-index: 20; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
-  font: 700 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: #1b1e1fcc; border: 1px solid #4a5558; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.sb-top { position: absolute; z-index: 20; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+  display: flex; gap: 6px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+.sb-top button { font: 700 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: #1b1e1fcc; border: 1px solid #4a5558;
+  border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.sb-top button:focus-visible { outline: 2px solid #7fb8d4; outline-offset: 2px; }
+.sb-show-top .sb-top, .sb-top:focus-within { opacity: 1; pointer-events: auto; }
+/* Slide number only when the pointer is in the lower-right corner (or after a tap there). */
+.reveal .slide-number { opacity: 0; transition: opacity .2s; }
+.sb-show-number .reveal .slide-number { opacity: 1; }
+.sb-overview { position: absolute; inset: 0; z-index: 40; overflow-y: auto; background: #1b1e1f; -webkit-overflow-scrolling: touch;
+  padding-block: calc(24px + env(safe-area-inset-top, 0px)) 40px; }
+.sb-ov-list { display: flex; flex-direction: column; align-items: center; gap: 22px; margin: 0; padding: 0 16px; list-style: none; }
+.sb-ov-list > li { width: min(920px, 100%); }
+.sb-ov-item { display: grid; grid-template-columns: 2.5em minmax(0, 1fr); align-items: start; gap: 10px; width: 100%;
+  background: none; border: 0; padding: 0; cursor: pointer; color: #93a39d; font: 600 15px ui-monospace, Menlo, monospace; text-align: right; }
+.sb-ov-board { position: relative; aspect-ratio: 16 / 9; background: #fff; border-radius: 3px; overflow: hidden; outline: 3px solid transparent; outline-offset: 3px; }
+.sb-ov-board img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+.sb-ov-item.current .sb-ov-board { outline-color: #7fb8d4; }
+.sb-ov-item.current { color: #e3e9e1; }
+.sb-ov-item:focus-visible .sb-ov-board { outline-color: #e3e9e1; }
+.sb-ov-head { position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; width: min(920px, 100%);
+  margin: 0 auto 14px; padding: 8px 16px; box-sizing: border-box; color: #93a39d; font: 13px system-ui, -apple-system, sans-serif;
+  background: #1b1e1f; z-index: 1; }
+.sb-ov-item:focus { outline: none; }
 .sb-hint { position: absolute; z-index: 20; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
   font: 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: #1b1e1fd9; border-radius: 6px; padding: 7px 12px;
   white-space: nowrap; pointer-events: none; transition: opacity .4s; }
@@ -54,8 +79,11 @@ export const PLAYER_UI_CSS = `
  */
 export function present(container, slides, startIndex = 0, onClose) {
   container.innerHTML = `<div class="reveal"><div class="slides">${slides.map((s) => slideMarkup(s.layers)).join('')}</div></div>
-    ${onClose ? '<button type="button" class="sb-close" aria-label="Close presentation">Close</button>' : ''}
-    <div class="sb-hint" role="note">→ next build · ← back · ↓ ↑ change slide · Pencil or L = laser pointer</div>
+    <div class="sb-top">
+      <button type="button" class="sb-ov-btn" aria-label="Slide overview">Overview</button>
+      ${onClose ? '<button type="button" class="sb-close" aria-label="Close presentation">Close</button>' : ''}
+    </div>
+    <div class="sb-hint" role="note">→ next build · ← back · ↓ ↑ change slide · O overview · Pencil or L = laser pointer</div>
     <div class="sb-laser" aria-hidden="true"></div>`
   const el = container.querySelector('.reveal')
   const deck = new Reveal(el, { ...REVEAL_OPTIONS, embedded: true })
@@ -71,11 +99,76 @@ export function present(container, slides, startIndex = 0, onClose) {
   const nextBuild = () => { if (deck.availableFragments().next) deck.nextFragment(); else goSlide(deck.getIndices().h + 1) }
   const prevBuild = () => { if (deck.availableFragments().prev) deck.prevFragment(); else goSlide(deck.getIndices().h - 1) }
 
+  // ----- corner controls: shown only while the pointer is in that corner -----
+  let hideTop = null, hideNum = null
+  const flash = (cls, ms) => {
+    container.classList.add(cls)
+    const t = cls === 'sb-show-top' ? hideTop : hideNum
+    clearTimeout(t)
+    const nt = setTimeout(() => container.classList.remove(cls), ms)
+    if (cls === 'sb-show-top') hideTop = nt; else hideNum = nt
+  }
+  const corner = (e) => {
+    const r = container.getBoundingClientRect()
+    const right = e.clientX > r.right - Math.min(220, r.width * 0.2)
+    if (right && e.clientY < r.top + Math.min(140, r.height * 0.18)) return 'top'
+    if (right && e.clientY > r.bottom - Math.min(120, r.height * 0.15)) return 'bottom'
+    return null
+  }
+  const onHover = (e) => {
+    if (e.pointerType !== 'mouse') return
+    const c = corner(e)
+    if (c === 'top') flash('sb-show-top', 1500)
+    if (c === 'bottom') flash('sb-show-number', 1500)
+  }
+
+  // ----- overview: every slide at its final build stage, in one scrolling column -----
+  let overview = null
+  const finalLayers = (layers) => layers.filter((l) => l.out === undefined)
+  const openOverview = () => {
+    if (overview) return
+    const cur = deck.getIndices().h
+    overview = document.createElement('div')
+    overview.className = 'sb-overview'
+    overview.setAttribute('role', 'dialog')
+    overview.setAttribute('aria-label', 'Slide overview')
+    overview.innerHTML = `<div class="sb-ov-head"><span>${slides.length} slides · tap one to go there · Esc or O to return</span></div>
+      <ol class="sb-ov-list">${slides.map((s, i) => `<li><button type="button" class="sb-ov-item${i === cur ? ' current' : ''}" data-i="${i}">
+        <span>${i + 1}</span><div class="sb-ov-board">${finalLayers(s.layers).map((l) => `<img alt="" loading="lazy" decoding="async" src="${svgUrl(l.svg)}">`).join('')}</div>
+      </button></li>`).join('')}</ol>`
+    overview.addEventListener('click', (e) => {
+      const b = e.target.closest('.sb-ov-item')
+      if (!b) return
+      closeOverview()
+      goSlide(Number(b.dataset.i))
+    })
+    container.append(overview)
+    const curEl = overview.querySelector('.sb-ov-item.current')
+    curEl?.scrollIntoView({ block: 'center' })
+    curEl?.focus({ preventScroll: true })
+  }
+  const closeOverview = () => { overview?.remove(); overview = null }
+  const toggleOverview = () => (overview ? closeOverview() : openOverview())
+
+  const onOverviewKey = (e) => {
+    const k = e.key
+    const items = [...overview.querySelectorAll('.sb-ov-item')]
+    const at = Math.max(0, items.indexOf(document.activeElement))
+    if (k === 'Escape' || k === 'o' || k === 'O') closeOverview()
+    else if (k === 'ArrowDown' || k === 'ArrowRight') items[Math.min(items.length - 1, at + 1)].focus()
+    else if (k === 'ArrowUp' || k === 'ArrowLeft') items[Math.max(0, at - 1)].focus()
+    else if (k === 'Enter' || k === ' ') { closeOverview(); goSlide(at) }
+    else return
+    e.preventDefault(); e.stopPropagation()
+  }
+
   const onKey = (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return
+    if (overview) { onOverviewKey(e); return }
     const k = e.key
     let handled = true
-    if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'n') nextBuild()
+    if (k === 'o' || k === 'O') openOverview()
+    else if (k === 'ArrowRight' || k === ' ' || k === 'PageDown' || k === 'n') nextBuild()
     else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'p') prevBuild()
     else if (k === 'ArrowDown') goSlide(deck.getIndices().h + 1)
     else if (k === 'ArrowUp') goSlide(deck.getIndices().h - 1)
@@ -126,6 +219,10 @@ export function present(container, slides, startIndex = 0, onClose) {
     down = null
     const dist = Math.hypot(dx, dy)
     if (dist < 12) {
+      // A tap in the upper- or lower-right corner shows the controls or the slide number instead of advancing.
+      const c = corner(e)
+      if (c === 'top') { flash('sb-show-top', 4000); return }
+      if (c === 'bottom') { flash('sb-show-number', 3000); return }
       const r = el.getBoundingClientRect()
       if (e.clientX - r.left < r.width / 5) prevBuild(); else nextBuild()
     } else if (dist > 40) {
@@ -138,6 +235,7 @@ export function present(container, slides, startIndex = 0, onClose) {
     if (closed) return
     closed = true
     window.removeEventListener('keydown', onKey, true)
+    clearTimeout(hideTop); clearTimeout(hideNum)
     try { deck.destroy() } catch {}
     container.innerHTML = ''
     onClose && onClose()
@@ -148,6 +246,8 @@ export function present(container, slides, startIndex = 0, onClose) {
   el.addEventListener('pointerup', onUp)
   el.addEventListener('pointercancel', (e) => { if (e.pointerType === 'pen') { penDown = false; laserOff() } down = null })
   container.addEventListener('pointermove', onMove)
+  container.addEventListener('pointermove', onHover)
+  container.querySelector('.sb-ov-btn').addEventListener('click', openOverview)
   container.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'pen' || !penDown) laser.classList.remove('on') })
   el.style.touchAction = 'none'
   container.querySelector('.sb-close')?.addEventListener('click', close)

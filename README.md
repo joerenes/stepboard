@@ -47,6 +47,10 @@ Right / Space / Page Down / tap: next build, then next slide. Left / Page Up / t
 Down / Up or swipe up / down: next / previous slide, returning to the build state you left it in. F: full screen. Esc: stop.
 Laser pointer: the Pencil always shows a red dot (touching, or hovering on iPads with Pencil hover) and never navigates;
 L toggles the dot for the mouse (air-mouse presenter remotes).
+O (or the Overview button): every slide at its final build stage in one scrolling column; tap or Enter to go there.
+Overview and Close appear while the pointer is in the upper-right corner (or after a tap there); the slide number
+appears in the lower-right corner the same way. Slide pictures are decoded lazily (reveal.js data-src), so big decks
+open quickly; the editor re-renders only slides changed since the last save before presenting or exporting.
 
 ## Pen width
 tldraw 3 has no setting for pressure response or stroke width beyond S/M/L/XL. Stepboard adds a Pen width multiplier
