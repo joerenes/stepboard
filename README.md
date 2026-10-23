@@ -47,7 +47,10 @@ Right / Space / Page Down / tap: next build, then next slide. Left / Page Up / t
 Down / Up or swipe up / down: next / previous slide, returning to the build state you left it in. F: full screen. Esc: stop.
 Laser pointer: the Pencil always shows a red dot (touching, or hovering on iPads with Pencil hover) and never navigates;
 L toggles the dot for the mouse (air-mouse presenter remotes).
-O (or the Overview button): every slide at its final build stage in one scrolling column; tap or Enter to go there.
+O (or the Overview button): every slide at its final build stage in one scrolling column; tap or Enter to go there,
+O again to return (Esc is left to the browser for leaving full screen).
+Print / PDF (lower-left corner): one page per slide (final build stage) or one page per build stage, 16:9 pages;
+choose "Save as PDF" in the print dialog (on the iPad: Print, then Share > Save to Files).
 Overview and Close appear while the pointer is in the upper-right corner (or after a tap there); the slide number
 appears in the lower-right corner the same way. Slide pictures are decoded lazily (reveal.js data-src), so big decks
 open quickly; the editor re-renders only slides changed since the last save before presenting or exporting.

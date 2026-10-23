@@ -42,6 +42,13 @@ export const PLAYER_UI_CSS = `
   border-radius: 6px; padding: 6px 12px; cursor: pointer; }
 .sb-top button:focus-visible { outline: 2px solid #7fb8d4; outline-offset: 2px; }
 .sb-show-top .sb-top, .sb-top:focus-within { opacity: 1; pointer-events: auto; }
+.sb-print-menu { position: absolute; z-index: 20; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 6px; opacity: 0; pointer-events: none; transition: opacity .2s;
+  font: 13px system-ui, -apple-system, sans-serif; color: #93a39d; background: #1b1e1fd9; border-radius: 8px; padding: 5px 6px 5px 10px; }
+.sb-print-menu button { font: 700 13px system-ui, -apple-system, sans-serif; color: #e3e9e1; background: transparent; border: 1px solid #4a5558;
+  border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.sb-print-menu button:focus-visible { outline: 2px solid #7fb8d4; outline-offset: 2px; }
+.sb-show-print .sb-print-menu, .sb-print-menu:focus-within { opacity: 1; pointer-events: auto; }
 /* Slide number only when the pointer is in the lower-right corner (or after a tap there). */
 .reveal .slide-number { opacity: 0; transition: opacity .2s; }
 .sb-show-number .reveal .slide-number { opacity: 1; }
@@ -83,6 +90,11 @@ export function present(container, slides, startIndex = 0, onClose) {
       <button type="button" class="sb-ov-btn" aria-label="Slide overview">Overview</button>
       ${onClose ? '<button type="button" class="sb-close" aria-label="Close presentation">Close</button>' : ''}
     </div>
+    <div class="sb-print-menu" role="group" aria-label="Print or save as PDF">
+      <span>Print / PDF</span>
+      <button type="button" data-print="slides">One page per slide</button>
+      <button type="button" data-print="builds">One page per build</button>
+    </div>
     <div class="sb-hint" role="note">→ next build · ← back · ↓ ↑ change slide · O overview · Pencil or L = laser pointer</div>
     <div class="sb-laser" aria-hidden="true"></div>`
   const el = container.querySelector('.reveal')
@@ -100,26 +112,68 @@ export function present(container, slides, startIndex = 0, onClose) {
   const prevBuild = () => { if (deck.availableFragments().prev) deck.prevFragment(); else goSlide(deck.getIndices().h - 1) }
 
   // ----- corner controls: shown only while the pointer is in that corner -----
-  let hideTop = null, hideNum = null
+  const timers = {}
   const flash = (cls, ms) => {
     container.classList.add(cls)
-    const t = cls === 'sb-show-top' ? hideTop : hideNum
-    clearTimeout(t)
-    const nt = setTimeout(() => container.classList.remove(cls), ms)
-    if (cls === 'sb-show-top') hideTop = nt; else hideNum = nt
+    clearTimeout(timers[cls])
+    timers[cls] = setTimeout(() => container.classList.remove(cls), ms)
   }
+  const CORNER_CLASS = { top: 'sb-show-top', bottom: 'sb-show-number', left: 'sb-show-print' }
   const corner = (e) => {
     const r = container.getBoundingClientRect()
-    const right = e.clientX > r.right - Math.min(220, r.width * 0.2)
+    const w = Math.min(260, r.width * 0.22)
+    const right = e.clientX > r.right - w
+    const left = e.clientX < r.left + w
     if (right && e.clientY < r.top + Math.min(140, r.height * 0.18)) return 'top'
     if (right && e.clientY > r.bottom - Math.min(120, r.height * 0.15)) return 'bottom'
+    if (left && e.clientY > r.bottom - Math.min(120, r.height * 0.15)) return 'left'
     return null
   }
   const onHover = (e) => {
     if (e.pointerType !== 'mouse') return
     const c = corner(e)
-    if (c === 'top') flash('sb-show-top', 1500)
-    if (c === 'bottom') flash('sb-show-number', 1500)
+    if (c) flash(CORNER_CLASS[c], 1500)
+  }
+
+  // ----- print / save as PDF: one page per slide (final build stage) or one page per build stage -----
+  let printing = false
+  const printDeck = async (mode) => {
+    if (printing) return
+    printing = true
+    if (document.fullscreenElement) await document.exitFullscreen?.().catch(() => {})
+    const pages = []
+    for (const s of slides) {
+      const last = s.layers.reduce((m, l) => Math.max(m, l.in, l.out ?? 0), 0)
+      const steps = mode === 'builds' ? Array.from({ length: last + 1 }, (_, i) => i) : [last]
+      for (const step of steps) {
+        const vis = s.layers.filter((l) => l.in <= step && (l.out === undefined || step < l.out))
+        pages.push(`<div class="sb-print-page">${vis.map((l) => `<img alt="" src="${svgUrl(l.svg)}">`).join('')}</div>`)
+      }
+    }
+    const sheet = document.createElement('div')
+    sheet.className = 'sb-print-sheet'
+    sheet.innerHTML = pages.join('')
+    const style = document.createElement('style')
+    style.textContent = `
+      @page { size: 16in 9in; margin: 0; }
+      .sb-print-sheet { display: none; }
+      @media print {
+        html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+        body > *:not(.sb-print-sheet) { display: none !important; }
+        .sb-print-sheet { display: block; }
+        .sb-print-page { position: relative; width: 16in; height: 9in; overflow: hidden; background: #fff;
+          break-after: page; page-break-after: always; }
+        .sb-print-page:last-child { break-after: auto; page-break-after: auto; }
+        .sb-print-page img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }`
+    document.body.append(style, sheet)
+    // Wait until every page picture is decoded, or the print preview can come out blank.
+    await Promise.all([...sheet.querySelectorAll('img')].map((img) => img.decode().catch(() => {})))
+    const cleanup = () => { sheet.remove(); style.remove(); printing = false; window.removeEventListener('afterprint', cleanup) }
+    window.addEventListener('afterprint', cleanup)
+    window.print()
+    setTimeout(() => { if (printing) cleanup() }, 60000) // in case a browser never fires afterprint
   }
 
   // ----- overview: every slide at its final build stage, in one scrolling column -----
@@ -132,7 +186,7 @@ export function present(container, slides, startIndex = 0, onClose) {
     overview.className = 'sb-overview'
     overview.setAttribute('role', 'dialog')
     overview.setAttribute('aria-label', 'Slide overview')
-    overview.innerHTML = `<div class="sb-ov-head"><span>${slides.length} slides · tap one to go there · Esc or O to return</span></div>
+    overview.innerHTML = `<div class="sb-ov-head"><span>${slides.length} slides · tap one to go there · O to return</span></div>
       <ol class="sb-ov-list">${slides.map((s, i) => `<li><button type="button" class="sb-ov-item${i === cur ? ' current' : ''}" data-i="${i}">
         <span>${i + 1}</span><div class="sb-ov-board">${finalLayers(s.layers).map((l) => `<img alt="" loading="lazy" decoding="async" src="${svgUrl(l.svg)}">`).join('')}</div>
       </button></li>`).join('')}</ol>`
@@ -154,7 +208,8 @@ export function present(container, slides, startIndex = 0, onClose) {
     const k = e.key
     const items = [...overview.querySelectorAll('.sb-ov-item')]
     const at = Math.max(0, items.indexOf(document.activeElement))
-    if (k === 'Escape' || k === 'o' || k === 'O') closeOverview()
+    if (k === 'Escape') return // left to the browser, which uses it to leave full screen
+    if (k === 'o' || k === 'O') closeOverview()
     else if (k === 'ArrowDown' || k === 'ArrowRight') items[Math.min(items.length - 1, at + 1)].focus()
     else if (k === 'ArrowUp' || k === 'ArrowLeft') items[Math.max(0, at - 1)].focus()
     else if (k === 'Enter' || k === ' ') { closeOverview(); goSlide(at) }
@@ -223,6 +278,7 @@ export function present(container, slides, startIndex = 0, onClose) {
       const c = corner(e)
       if (c === 'top') { flash('sb-show-top', 4000); return }
       if (c === 'bottom') { flash('sb-show-number', 3000); return }
+      if (c === 'left') { flash('sb-show-print', 4000); return }
       const r = el.getBoundingClientRect()
       if (e.clientX - r.left < r.width / 5) prevBuild(); else nextBuild()
     } else if (dist > 40) {
@@ -235,7 +291,7 @@ export function present(container, slides, startIndex = 0, onClose) {
     if (closed) return
     closed = true
     window.removeEventListener('keydown', onKey, true)
-    clearTimeout(hideTop); clearTimeout(hideNum)
+    Object.values(timers).forEach(clearTimeout)
     try { deck.destroy() } catch {}
     container.innerHTML = ''
     onClose && onClose()
@@ -248,6 +304,7 @@ export function present(container, slides, startIndex = 0, onClose) {
   container.addEventListener('pointermove', onMove)
   container.addEventListener('pointermove', onHover)
   container.querySelector('.sb-ov-btn').addEventListener('click', openOverview)
+  container.querySelectorAll('[data-print]').forEach((b) => b.addEventListener('click', () => printDeck(b.dataset.print)))
   container.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'pen' || !penDown) laser.classList.remove('on') })
   el.style.touchAction = 'none'
   container.querySelector('.sb-close')?.addEventListener('click', close)
