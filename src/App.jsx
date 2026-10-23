@@ -519,7 +519,7 @@ function App() {
         loaded.current = true
         editor.zoomToBounds(SLIDE_BOX, { inset: 24, immediate: true })
         await flush(editor, editor.getPages().map((p) => p.id))
-        const summary = `Imported ${r.slides} slides, ${r.strokes} strokes, ${r.texts} text items${r.warnings.length ? ` (not converted: ${r.warnings.join(', ')})` : ''}`
+        const summary = `Imported ${r.slides} slides, ${r.strokes} strokes, ${r.texts} text items, ${r.images} images${r.warnings.length ? ` (not converted: ${r.warnings.join(', ')})` : ''}`
         setTimeout(() => setStatus(summary), 1500) // after the save that renaming the deck triggers
         return ''
       } catch (e) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["keynote-parser==1.14.5.0"]
+# dependencies = ["keynote-parser==1.14.5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
 # ///
 """
 key2stepboard: convert an Apple Keynote file into a Stepboard import file.
@@ -20,16 +20,23 @@ What is converted
   * pencil drawings: every stroke as an editable tldraw stroke with its colour and width
     (Keynote's crayon/brush texture is not reproduced; those strokes come out solid)
   * text boxes and visible title placeholders: plain text, approximate size, colour and alignment
+  * images (PNG, JPEG, GIF, WebP, SVG as they are; PDF images such as pasted equations are rendered to
+    sharp PNGs; TIFF/BMP converted to PNG), with position, size and rotation
+  * slide background colours
   * builds: "In" builds become steps where the object appears, "Out" builds steps where it disappears;
     a build set to start automatically (with / after the previous one) joins the previous step
-What is not converted (yet): images, shapes other than strokes, tables, charts, transitions, notes.
+What is not converted (yet): image cropping (the whole image is shown), shapes other than strokes, tables,
+charts, movies, background images, transitions, notes.
 
-Needs keynote-parser 1.14.5 (reads Keynote 14 and 15 files); uv installs it automatically.
+Needs keynote-parser 1.14.5 (reads Keynote 14 and 15 files), pypdfium2 and Pillow; uv installs them.
 """
 import argparse
+import base64
+import io
 import json
 import math
 import os
+import re
 import sys
 import warnings
 import zipfile
@@ -69,6 +76,73 @@ def read_archives(path):
     if not objs:
         raise SystemExit(f'{path}: no Keynote data found. Is this a .key file saved as a single file?')
     return objs
+
+
+def media_index(path):
+    """Image files in the package's Data folder, keyed by the data identifier at the end of their name."""
+    out = {}
+    with zipfile.ZipFile(path) as z:
+        for name in z.namelist():
+            m = re.match(r'^Data/(.+)-(\d+)\.(\w+)$', name)
+            if m:
+                out[m.group(2)] = name
+    return out
+
+
+MIME = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif',
+        'webp': 'image/webp', 'svg': 'image/svg+xml'}
+
+
+def web_image(name, raw, display_w):
+    """(mime, bytes, pixel width, pixel height) of an image a browser can show, converting if needed."""
+    ext = name.rsplit('.', 1)[-1].lower()
+    if ext == 'pdf':
+        import pypdfium2 as pdfium
+        page = pdfium.PdfDocument(raw)[0]
+        pw, _ = page.get_size()
+        # Render at 3x the size it is shown at on the 1920-wide slide, so it stays sharp on a projector.
+        scale = max(1.0, min(4000 / pw, 3 * max(display_w, 1) / pw))
+        img = page.render(scale=scale).to_pil()
+        buf = io.BytesIO()
+        img.save(buf, 'PNG', optimize=True)
+        return 'image/png', buf.getvalue(), img.width, img.height
+    from PIL import Image
+    if ext in MIME and ext != 'svg':
+        with Image.open(io.BytesIO(raw)) as im:
+            return MIME[ext], raw, im.width, im.height
+    if ext == 'svg':
+        return MIME['svg'], raw, 0, 0
+    with Image.open(io.BytesIO(raw)) as im:  # TIFF, BMP, ...; raises for formats Pillow can't read (e.g. HEIC)
+        im = im.convert('RGBA')
+        buf = io.BytesIO()
+        im.save(buf, 'PNG', optimize=True)
+        return 'image/png', buf.getvalue(), im.width, im.height
+
+
+class Media:
+    """Loads, converts and de-duplicates the images used by the slides."""
+    def __init__(self, path):
+        self.path = path
+        self.index = media_index(path)
+        self.assets = {}
+
+    def asset(self, data_id, display_w, warnings):
+        name = self.index.get(str(data_id))
+        if not name:
+            warnings.add('an image whose file is missing from the Keynote package')
+            return None
+        if name in self.assets:
+            return name
+        with zipfile.ZipFile(self.path) as z:
+            raw = z.read(name)
+        try:
+            mime, data, pw, ph = web_image(name, raw, display_w)
+        except Exception as e:
+            warnings.add(f'an image that could not be converted ({os.path.basename(name)}: {e})')
+            return None
+        self.assets[name] = {'name': os.path.basename(name), 'mime': mime, 'w': pw, 'h': ph,
+                             'src': f'data:{mime};base64,' + base64.b64encode(data).decode('ascii')}
+        return name
 
 
 def ref(o, *keys):
@@ -111,12 +185,44 @@ def hex_color(c, default='#000000'):
 
 
 def stroke_style(objs, sid):
+    """Stroke colour/width/brush, or None when the shape has no visible outline."""
     st = style_prop(objs, sid, 'shapeProperties', 'stroke') or {}
+    if (st.get('pattern') or {}).get('type') == 'TSDEmptyPattern' or not st.get('width', 1):
+        return None
     return {
         'color': hex_color(st.get('color')),
         'width': float(st.get('width', 3.0)),
         'brush': (st.get('smartStroke') or {}).get('strokeName'),
     }
+
+
+def fill_color(objs, sid, warnings):
+    """A shape's fill as one colour (gradients use their first colour), or None."""
+    f = style_prop(objs, sid, 'shapeProperties', 'fill') or {}
+    if f.get('color'):
+        return hex_color(f['color'])
+    stops = (f.get('gradient') or {}).get('stops') or []
+    if stops and stops[0].get('color'):
+        warnings.add('gradient fills (the first colour is used)')
+        return hex_color(stops[0]['color'])
+    if f.get('image'):
+        warnings.add('image fills of shapes')
+    return None
+
+
+def axis_rect(lines):
+    """(x, y, w, h) when the path is a single axis-aligned rectangle, else None."""
+    lines = [l for l in lines if len(l) > 1]  # Keynote paths often end with a stray moveTo
+    if len(lines) != 1:
+        return None
+    pts = lines[0]
+    xs = sorted({round(p[0], 1) for p in pts})
+    ys = sorted({round(p[1], 1) for p in pts})
+    x0, x1, y0, y1 = xs[0], xs[-1], ys[0], ys[-1]
+    if x1 - x0 < 1 or y1 - y0 < 1:
+        return None
+    on_edge = all(min(abs(p[0] - x0), abs(p[0] - x1)) < 0.6 or min(abs(p[1] - y0), abs(p[1] - y1)) < 0.6 for p in pts)
+    return (x0, y0, x1 - x0, y1 - y0) if on_edge else None
 
 
 # ---------------------------------------------------------------- geometry
@@ -278,8 +384,26 @@ def text_items(objs, shape, storage_id, xf, w, h, valign, pad):
 
 # ---------------------------------------------------------------- slides
 
-def drawable_items(objs, did, parent_xf, warnings):
-    """Strokes and text for one drawable (recursing into groups), in slide coordinates."""
+def image_item(objs, o, parent_xf, media, warnings):
+    sp = o.get('super', {})
+    natural = o.get('naturalSize') or {}
+    xf = parent_xf @ geometry_xf(sp.get('geometry', {}), natural)[0]
+    nw, nh = natural.get('width', 0) or 0, natural.get('height', 0) or 0
+    if not nw or not nh:
+        return []
+    p0, p1, p3 = xf.apply(0, 0), xf.apply(nw, 0), xf.apply(0, nh)
+    w, h = math.dist(p0, p1), math.dist(p0, p3)
+    key = media.asset(ref(o, 'data'), w, warnings)
+    if not key:
+        return []
+    if o.get('mask') or o.get('instantAlphaPath'):
+        warnings.add('image cropping and instant alpha (the whole image is shown)')
+    return [{'type': 'image', 'asset': key, 'x': p0[0], 'y': p0[1], 'w': w, 'h': h,
+             'rotation': math.atan2(p1[1] - p0[1], p1[0] - p0[0])}]
+
+
+def drawable_items(objs, did, parent_xf, warnings, media):
+    """Strokes, text and images for one drawable (recursing into groups), in slide coordinates."""
     o = objs.get(did)
     if not o:
         return []
@@ -289,7 +413,7 @@ def drawable_items(objs, did, parent_xf, warnings):
         xf = geometry_xf(g)[0]
         items = []
         for ch in o.get('children', []):
-            items += drawable_items(objs, str(ch['identifier']), parent_xf @ xf, warnings)
+            items += drawable_items(objs, str(ch['identifier']), parent_xf @ xf, warnings, media)
         return items
     if t in ('TSWP.ShapeInfoArchive', 'KN.PlaceholderArchive'):
         si = o if t == 'TSWP.ShapeInfoArchive' else o.get('super', {})
@@ -321,16 +445,30 @@ def drawable_items(objs, did, parent_xf, warnings):
             warnings.add('a shape type that is not converted yet')
             return []
         style = stroke_style(objs, sid)
+        fill = fill_color(objs, sid, warnings)
+        lines = sample_path(bp.get('path', {}).get('elements', []), xf)
         items = []
-        for line in sample_path(bp.get('path', {}).get('elements', []), xf):
-            items.append({'type': 'stroke', 'points': [[round(x, 2), round(y, 2)] for x, y in line], **style})
+        rect = axis_rect(lines) if fill else None
+        if rect:
+            # Filled rectangles (backdrops, boxes) become tldraw rectangles.
+            items.append({'type': 'rect', 'x': rect[0], 'y': rect[1], 'w': rect[2], 'h': rect[3], 'fill': fill,
+                          **({'color': style['color'], 'width': style['width']} if style else {})})
+        elif style or fill:
+            for line in (l for l in lines if len(l) > 1 or not fill):
+                it = {'type': 'stroke', 'points': [[round(x, 2), round(y, 2)] for x, y in line],
+                      **(style or {'color': fill, 'width': 1.0})}
+                if fill:
+                    it['fill'] = fill
+                items.append(it)
         storage = ref(si, 'ownedStorage')  # a shape with text inside it
         st = objs.get(storage) if storage else None
         if st and st.get('text') and ''.join(st['text']).strip():
             items += text_items(objs, si, storage, xf, w, h, valign, pad)
         return items
-    if t in ('TSD.ImageArchive', 'TSD.MovieArchive'):
-        warnings.add('images and movies (not converted yet)')
+    if t == 'TSD.ImageArchive':
+        return image_item(objs, o, parent_xf, media, warnings)
+    if t == 'TSD.MovieArchive':
+        warnings.add('movies (not converted yet)')
     else:
         warnings.add(f'{t} objects (not converted yet)')
     return []
@@ -365,6 +503,7 @@ def convert(path, include_skipped=False):
         raise SystemExit(f'{path}: no presentation found in this file.')
     size = show.get('size', {'width': 1920, 'height': 1080})
     warnings = set()
+    media = Media(path)
     slides = []
     for node_ref in show.get('slideTree', {}).get('slides', []):
         node = objs.get(str(node_ref['identifier']), {})
@@ -378,19 +517,26 @@ def convert(path, include_skipped=False):
         for z, dref in enumerate(slide.get('drawablesZOrder', [])):
             did = str(dref['identifier'])
             b = builds.get(did, {})
-            for it in drawable_items(objs, did, Xf(), warnings):
+            for it in drawable_items(objs, did, Xf(), warnings, media):
                 it['group'] = did
                 it['in'] = b.get('in', 0)
                 if 'out' in b:
                     it['out'] = b['out']
                 items.append(it)
         title = next((i['text'] for i in items if i['type'] == 'text'), '')
-        slides.append({'name': title[:60] or f'Slide {len(slides) + 1}', 'items': items})
+        fill = style_prop(objs, ref(slide, 'style'), 'slideProperties', 'fill') or {}
+        if fill.get('image') or fill.get('gradient'):
+            warnings.add('background images and gradients (a plain colour is used)')
+        entry = {'name': title[:60] or f'Slide {len(slides) + 1}', 'items': items}
+        if fill.get('color'):
+            entry['background'] = hex_color(fill['color'], '#ffffff')
+        slides.append(entry)
     return {
         'format': FORMAT, 'version': 1, 'source': 'keynote',
         'name': os.path.splitext(os.path.basename(path))[0],
         'slide': {'width': size.get('width', 1920), 'height': size.get('height', 1080)},
         'slides': slides,
+        'assets': media.assets,
         'warnings': sorted(warnings),
     }
 
@@ -408,8 +554,9 @@ def main():
         json.dump(data, f, separators=(',', ':'))
     strokes = sum(1 for s in data['slides'] for i in s['items'] if i['type'] == 'stroke')
     texts = sum(1 for s in data['slides'] for i in s['items'] if i['type'] == 'text')
+    images = sum(1 for s in data['slides'] for i in s['items'] if i['type'] == 'image')
     steps = sum(max([i.get('out', 0) for i in s['items']] + [i['in'] for i in s['items']] + [0]) for s in data['slides'])
-    print(f'{out}: {len(data["slides"])} slides, {strokes} strokes, {texts} text items, {steps} build steps')
+    print(f'{out}: {len(data["slides"])} slides, {strokes} strokes, {texts} text items, {images} images, {steps} build steps')
     for w in data['warnings']:
         print(f'  skipped: {w}')
 

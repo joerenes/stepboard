@@ -66,6 +66,9 @@ Then in Stepboard: Open file, choose `lecture.stepboard-import.json`. This repla
 Converted: slides in order (skipped slides only with `--include-skipped`); pencil drawings as editable strokes with
 their width (colours go to the nearest tldraw colour, the exact one is kept in each shape's `meta.sourceColor`);
 each Keynote drawing becomes a tldraw group; text boxes and visible titles as text (approximate font and size);
-builds: In = appears at that step, Out = disappears; builds that start automatically join the previous step.
-Not converted yet: images, other shapes, tables, charts, transitions, presenter notes. Crayon/brush texture
-comes out as a solid stroke.
+images (PNG/JPEG/GIF/WebP/SVG as they are, PDF images such as pasted equations rendered to sharp PNGs, TIFF/BMP
+converted); slide background colours and filled boxes in their exact colour (as single-colour images, since
+tldraw's named colours can't express them; backgrounds are locked); builds: In = appears at that step,
+Out = disappears; builds that start automatically join the previous step.
+Not converted yet: image cropping (the whole image is shown), other shapes, tables, charts, movies, background
+images and gradients, transitions, presenter notes. Crayon/brush texture comes out as a solid stroke.

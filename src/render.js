@@ -17,6 +17,8 @@ export async function renderPage(editor, pageId = editor.getCurrentPageId()) {
     if (!res) continue
     // Strip fixed pixel sizes so the SVG scales with its container.
     const svg = res.svg.replace(/^<svg([^>]*?)\swidth="[^"]*"/, '<svg$1').replace(/^<svg([^>]*?)\sheight="[^"]*"/, '<svg$1')
+      // tldraw draws a halo in the background colour around text; slides look like Keynote without it.
+      .replaceAll('var(--tl-text-outline)', 'none')
     out.push({ in: layer.in, out: layer.out, svg })
   }
   return out
