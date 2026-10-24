@@ -7,7 +7,8 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 - `src/model.js`     step model (pure functions: visibility, layers, insert/merge/swap steps)
 - `src/render.js`    renders a slide into stacked SVG layers (same 1600x900 bounds, so they line up)
 - `src/player.js`    reveal.js player: builds on left/right, slides on up/down, remembers each slide's build state
-- `src/export.js`    standalone HTML export with the player and reveal.js inlined (works offline)
+- `src/export.js`    standalone HTML export: the whole deck, the player and reveal.js inlined (works offline);
+  Open file in the editor or player reads the deck back out of it (`src/deckfile.js`)
 - `src/runtime.js`   player bundle that gets inlined into exported HTML
 - `src/present.js` + `src/present.template.html`  Stepboard Player page (present.html): open a deck file and present
 - `src/importer.js`  builds a deck from a converted Keynote file (see below)
@@ -29,7 +30,7 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 ## Build
 `npm install && node build.mjs` -> `dist/`, a complete static website: the editor at `index.html`, the player at
 `present.html`, tldraw's assets, the home-screen manifest and icons, and the tldraw license.
-The player can open a deck from the same server: `present.html?deck=lecture-1.stepboard.json`.
+The player can open a deck from the same server: `present.html?deck=lecture-1.stepboard.json` (or an exported `.html`).
 
 GitHub Pages: `.github/workflows/pages.yml` builds and publishes `dist/` on every push to `master`
 (one-time: Settings > Pages > Source: GitHub Actions). The site is then at https://joerenes.github.io/stepboard/.

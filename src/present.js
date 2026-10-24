@@ -2,12 +2,14 @@
 // A deck can also be opened from the same server with ?deck=lecture-1.stepboard.json
 import 'reveal.js/dist/reveal.css'
 import { present, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
+import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 
 const style = document.createElement('style')
 style.textContent = PLAYER_CSS + PLAYER_UI_CSS
 document.head.append(style)
 
 const $ = (id) => document.getElementById(id)
+$('file').accept = DECK_FILE_ACCEPT
 let slides = null
 let title = ''
 
@@ -38,7 +40,9 @@ function show(deck, source) {
 function setError(msg) { $('error').textContent = msg; $('error').hidden = false }
 
 async function readFile(file) {
-  try { show(JSON.parse(await file.text()), file.name) } catch { setError('That file is not valid JSON.') }
+  let deck
+  try { deck = parseDeckText(await file.text()) } catch (e) { setError(e.message); return }
+  show(deck, file.name)
 }
 
 $('file').addEventListener('change', (e) => { const f = e.target.files?.[0]; if (f) readFile(f) })
@@ -60,7 +64,7 @@ $('present').addEventListener('click', () => {
 
 const param = new URLSearchParams(location.search).get('deck')
 if (param) {
-  fetch(param).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-    .then((d) => show(d, param))
+  fetch(param).then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    .then((t) => show(parseDeckText(t), param))
     .catch((e) => setError(`Could not load ${param} (${e.message}). Check the file name and that it sits on this server.`))
 }

@@ -16,6 +16,7 @@ import {
 import { renderPage, SLIDE_BOX } from './render.js'
 import { present, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
 import { standaloneHtml } from './export.js'
+import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 import { buildFromImport, IMPORT_FORMAT } from './importer.js'
 import { loadDeck, saveDeck } from './storage.js'
 
@@ -338,8 +339,8 @@ function ImportDialog({ onFile, onClose }) {
   return (
     <dialog ref={ref} className="sb-dialog" onClose={onClose}>
       <h2>Open a deck file</h2>
-      <p>Choose a Stepboard deck (.stepboard.json) or a converted Keynote file (.stepboard-import.json). Opening a file replaces the deck stored in this browser, so save a copy of the current deck first if you want to keep it.</p>
-      <input id="import-file" type="file" accept=".json,application/json" onChange={async (e) => {
+      <p>Choose a Stepboard deck (.stepboard.json), a presentation made with Export HTML (.html), or a converted Keynote file (.stepboard-import.json). Opening a file replaces the deck stored in this browser, so save a copy of the current deck first if you want to keep it.</p>
+      <input id="import-file" type="file" accept={DECK_FILE_ACCEPT} onChange={async (e) => {
         const f = e.target.files?.[0]
         if (!f) return
         const msg = await onFile(f)
@@ -508,13 +509,12 @@ function App() {
   const exportHtml = async () => {
     clearTimeout(saveTimer.current)
     await flush(editor, pendingPages(editor))
-    const slides = editor.getPages().map((p) => ({ layers: cacheRef.current[p.id] || [] }))
-    const r = await offerFile(`${fileBase}.html`, standaloneHtml(name, slides), (filename, text) => setTextFile({ filename, text }))
+    const r = await offerFile(`${fileBase}.html`, standaloneHtml(name, deckObject(editor)), (filename, text) => setTextFile({ filename, text }))
     if (r === 'saved') setStatus(`Slides exported · ${fmtTime(new Date())}`)
   }
   const importFile = async (file) => {
     let deck
-    try { deck = JSON.parse(await file.text()) } catch { return 'That file is not valid JSON.' }
+    try { deck = parseDeckText(await file.text()) } catch (e) { return e.message }
     if (deck?.format === IMPORT_FORMAT) {
       // A converted Keynote file: build the slides with the editor.
       try {
