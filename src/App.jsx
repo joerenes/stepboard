@@ -14,7 +14,7 @@ import {
   setIn, setOut, clearOut, mapSteps, insertAfter, removeStep, swapSteps,
 } from './model.js'
 import { renderPage, SLIDE_BOX } from './render.js'
-import { present, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
+import { present, layerPicture, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
 import { standaloneHtml } from './export.js'
 import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 import { buildFromImport, IMPORT_FORMAT } from './importer.js'
@@ -215,14 +215,12 @@ function StepBar({ editor }) {
 }
 
 // ---------- sidebar ----------
-function Thumb({ layers }) {
-  return (
-    <div className="sb-thumb">
-      {(layers || []).map((l, i) => (
-        <img key={i} alt="" draggable="false" src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(l.svg)}`} />
-      ))}
-    </div>
-  )
+// Image sources by asset id, straight from the editor's store.
+const editorAssets = (editor) => Object.fromEntries(editor.getAssets().filter((a) => a.props?.src).map((a) => [a.id, a.props.src]))
+
+function Thumb({ layers, assets }) {
+  const html = (layers || []).map((l) => `<div class="sb-layer">${layerPicture(l, assets, false)}</div>`).join('')
+  return <div className="sb-thumb" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
 function Sidebar({ editor, cache }) {
@@ -230,6 +228,7 @@ function Sidebar({ editor, cache }) {
   const currentId = useValue('page', () => editor.getCurrentPageId(), [editor])
   const step = useValue('step', () => stepOf(editor), [editor])
   const tops = useValue('tops', () => topShapes(editor), [editor])
+  const assets = useMemo(() => editorAssets(editor), [editor, cache])
   const [confirmDelete, setConfirmDelete] = useState(false)
   useEffect(() => setConfirmDelete(false), [currentId])
 
@@ -273,7 +272,7 @@ function Sidebar({ editor, cache }) {
             <li key={p.id}>
               <button type="button" className={p.id === currentId ? 'sb-slide on' : 'sb-slide'} onClick={() => editor.setCurrentPage(p.id)} aria-current={p.id === currentId}>
                 <span className="sb-num">{i + 1}</span>
-                <Thumb layers={cache[p.id]} />
+                <Thumb layers={cache[p.id]} assets={assets} />
               </button>
             </li>
           ))}
@@ -493,7 +492,7 @@ function App() {
     const pages = editor.getPages()
     const slides = pages.map((p) => ({ layers: cacheRef.current[p.id] || [] }))
     const start = pages.findIndex((p) => p.id === editor.getCurrentPageId())
-    const close = present(playerRef.current, slides, start, () => setPresenting(false))
+    const close = present(playerRef.current, slides, start, () => setPresenting(false), editorAssets(editor))
     playerRef.current.requestFullscreen?.().catch(() => {})
     return () => { close(); if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}) }
   }, [presenting, editor])

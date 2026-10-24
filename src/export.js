@@ -20,7 +20,7 @@ export function standaloneHtml(title, deck) {
 <div id="deck"></div>
 <script type="application/json" id="sb-deck">${data}</script>
 <script>${scriptSafe(__PLAYER_RUNTIME__)}</script>
-<script>StepboardPlayer.present(document.getElementById('deck'), JSON.parse(document.getElementById('sb-deck').textContent).slides, 0)</script>
+<script>(() => { const d = JSON.parse(document.getElementById('sb-deck').textContent); StepboardPlayer.present(document.getElementById('deck'), d.slides, 0, null, StepboardPlayer.assetsFromDeck(d)) })()</script>
 </body></html>
 `
 }

@@ -6,12 +6,54 @@ import { SLIDE_W, SLIDE_H } from './model.js'
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
 const svgUrl = (svg) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+const pct = (v, total) => `${Math.round((v / total) * 1e5) / 1e3}%`
 
-export function slideMarkup(layers) {
+/** Image sources by tldraw asset id, from a deck (its tldraw document holds every image once). */
+export function assetsFromDeck(deck) {
+  const out = {}
+  for (const r of Object.values(deck?.tldraw?.store || {})) if (r?.typeName === 'asset' && r.props?.src) out[r.id] = r.props.src
+  return out
+}
+
+/** Turn data: URLs into blob: URLs once, so every <img> showing an image shares one decoded copy. */
+export function blobUrls(assets) {
+  const out = {}
+  for (const [id, src] of Object.entries(assets || {})) {
+    try {
+      const m = /^data:([^;,]+)(;[^,]*)?,(.*)$/s.exec(src)
+      if (!m) { out[id] = src; continue }
+      const isB64 = /;base64/.test(m[2] || '')
+      const bytes = isB64 ? Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(m[3]))
+      out[id] = URL.createObjectURL(new Blob([bytes], { type: m[1] }))
+    } catch { out[id] = src }
+  }
+  return out
+}
+
+/** Markup for one layer's picture. `lazy` uses data-src so reveal.js loads it only near the current slide. */
+export function layerPicture(l, urls, lazy) {
+  const attr = lazy ? 'data-src' : 'src'
+  if (l.svg) return `<img alt="" draggable="false" ${attr}="${svgUrl(l.svg)}">`
+  const im = l.image
+  const url = im && urls?.[im.asset]
+  if (!url) return ''
+  // Box at the image's place (rotated about its top-left corner, as in tldraw); the image fills it, or, when
+  // cropped, is enlarged and shifted so the cropped part fills it. Flips mirror the visible part.
+  const c = im.crop
+  const cw = c ? c.bottomRight.x - c.topLeft.x : 1
+  const ch = c ? c.bottomRight.y - c.topLeft.y : 1
+  const imgStyle = c ? `left:${(-c.topLeft.x / cw) * 100}%;top:${(-c.topLeft.y / ch) * 100}%;width:${100 / cw}%;height:${100 / ch}%` : 'inset:0;width:100%;height:100%'
+  const flip = im.flipX || im.flipY ? `transform:scale(${im.flipX ? -1 : 1},${im.flipY ? -1 : 1})` : ''
+  return `<div class="sb-imgbox" style="left:${pct(im.x, SLIDE_W)};top:${pct(im.y, SLIDE_H)};width:${pct(im.w, SLIDE_W)};height:${pct(im.h, SLIDE_H)};` +
+    `${im.rot ? `transform:rotate(${im.rot}rad);` : ''}${im.opacity !== undefined ? `opacity:${im.opacity};` : ''}">` +
+    `<div class="sb-imgflip" style="${flip}"><img alt="" draggable="false" ${attr}="${url}" style="${imgStyle}"></div></div>`
+}
+
+export function slideMarkup(layers, urls) {
   const parts = layers.map((l) => {
     // SVGs go in <img> so their internal ids and styles can't collide between layers. They use data-src, so
     // reveal.js only decodes the slides near the current one (its lazy loading), which keeps big decks quick.
-    let inner = `<div class="sb-layer"><img alt="" draggable="false" data-src="${svgUrl(l.svg)}"></div>`
+    let inner = `<div class="sb-layer">${layerPicture(l, urls, true)}</div>`
     if (l.out !== undefined) inner = `<div class="sb-layer fragment fade-out" data-fragment-index="${l.out}">${inner}</div>`
     if (l.in > 0) inner = `<div class="sb-layer fragment" data-fragment-index="${l.in}">${inner}</div>`
     return inner
@@ -21,9 +63,12 @@ export function slideMarkup(layers) {
 
 export const PLAYER_CSS = `
 .reveal .slides section { padding: 0; height: 100%; }
-.sb-board { position: absolute; inset: 0; background: #fff; }
+.sb-board { position: absolute; inset: 0; background: #fff; overflow: hidden; }
 .sb-layer { position: absolute; inset: 0; }
 .sb-layer > img { width: 100%; height: 100%; display: block; max-width: none; margin: 0; }
+.sb-imgbox { position: absolute; transform-origin: 0 0; overflow: hidden; }
+.sb-imgflip { position: absolute; inset: 0; }
+.sb-imgflip > img { position: absolute; display: block; max-width: none; margin: 0; }
 /* Builds pop in instantly, like Keynote's Appear. */
 .reveal .slides section .fragment, .reveal .slides section .fragment.visible { transition: none !important; }
 .reveal .slides section .fragment.fade-out.visible { opacity: 0; visibility: hidden; }
@@ -59,7 +104,7 @@ export const PLAYER_UI_CSS = `
 .sb-ov-item { display: grid; grid-template-columns: 2.5em minmax(0, 1fr); align-items: start; gap: 10px; width: 100%;
   background: none; border: 0; padding: 0; cursor: pointer; color: #93a39d; font: 600 15px ui-monospace, Menlo, monospace; text-align: right; }
 .sb-ov-board { position: relative; aspect-ratio: 16 / 9; background: #fff; border-radius: 3px; overflow: hidden; outline: 3px solid transparent; outline-offset: 3px; }
-.sb-ov-board img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+.sb-ov-board .sb-layer > img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
 .sb-ov-item.current .sb-ov-board { outline-color: #7fb8d4; }
 .sb-ov-item.current { color: #e3e9e1; }
 .sb-ov-item:focus-visible .sb-ov-board { outline-color: #e3e9e1; }
@@ -84,8 +129,9 @@ export const PLAYER_UI_CSS = `
  * Down / Up (or swipe up / down): next / previous slide, returning to the build state you left it in.
  * Returns a function that closes the player.
  */
-export function present(container, slides, startIndex = 0, onClose) {
-  container.innerHTML = `<div class="reveal"><div class="slides">${slides.map((s) => slideMarkup(s.layers)).join('')}</div></div>
+export function present(container, slides, startIndex = 0, onClose, assets = {}) {
+  const urls = blobUrls(assets)
+  container.innerHTML = `<div class="reveal"><div class="slides">${slides.map((s) => slideMarkup(s.layers, urls)).join('')}</div></div>
     <div class="sb-top">
       <button type="button" class="sb-ov-btn" aria-label="Slide overview">Overview</button>
       ${onClose ? '<button type="button" class="sb-close" aria-label="Close presentation">Close</button>' : ''}
@@ -147,7 +193,7 @@ export function present(container, slides, startIndex = 0, onClose) {
       const steps = mode === 'builds' ? Array.from({ length: last + 1 }, (_, i) => i) : [last]
       for (const step of steps) {
         const vis = s.layers.filter((l) => l.in <= step && (l.out === undefined || step < l.out))
-        pages.push(`<div class="sb-print-page">${vis.map((l) => `<img alt="" src="${svgUrl(l.svg)}">`).join('')}</div>`)
+        pages.push(`<div class="sb-print-page">${vis.map((l) => `<div class="sb-layer">${layerPicture(l, urls, false)}</div>`).join('')}</div>`)
       }
     }
     const sheet = document.createElement('div')
@@ -164,7 +210,8 @@ export function present(container, slides, startIndex = 0, onClose) {
         .sb-print-page { position: relative; width: 16in; height: 9in; overflow: hidden; background: #fff;
           break-after: page; page-break-after: always; }
         .sb-print-page:last-child { break-after: auto; page-break-after: auto; }
-        .sb-print-page img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+        .sb-print-page .sb-layer { position: absolute; inset: 0; }
+        .sb-print-page .sb-layer > img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       }`
     document.body.append(style, sheet)
@@ -188,7 +235,7 @@ export function present(container, slides, startIndex = 0, onClose) {
     overview.setAttribute('aria-label', 'Slide overview')
     overview.innerHTML = `<div class="sb-ov-head"><span>${slides.length} slides · tap one to go there · O to return</span></div>
       <ol class="sb-ov-list">${slides.map((s, i) => `<li><button type="button" class="sb-ov-item${i === cur ? ' current' : ''}" data-i="${i}">
-        <span>${i + 1}</span><div class="sb-ov-board">${finalLayers(s.layers).map((l) => `<img alt="" loading="lazy" decoding="async" src="${svgUrl(l.svg)}">`).join('')}</div>
+        <span>${i + 1}</span><div class="sb-ov-board">${finalLayers(s.layers).map((l) => `<div class="sb-layer">${layerPicture(l, urls, false)}</div>`).join('')}</div>
       </button></li>`).join('')}</ol>`
     overview.addEventListener('click', (e) => {
       const b = e.target.closest('.sb-ov-item')
@@ -293,6 +340,7 @@ export function present(container, slides, startIndex = 0, onClose) {
     window.removeEventListener('keydown', onKey, true)
     Object.values(timers).forEach(clearTimeout)
     try { deck.destroy() } catch {}
+    for (const u of Object.values(urls)) if (u.startsWith('blob:')) URL.revokeObjectURL(u)
     container.innerHTML = ''
     onClose && onClose()
   }

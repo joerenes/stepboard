@@ -56,7 +56,8 @@ function strokeShape(item, k, pageId) {
       color: nearestColor(item.fill || item.color), size: 's', dash: 'solid', fill: item.fill ? 'fill' : 'none',
       isPen: false, isComplete: true, isClosed: !!item.fill,
       scale: Math.max(0.05, (item.width * k) / STROKE_BASE),
-      segments: [{ type: 'free', points: pts.map(([x, y]) => ({ x: (x - x0) * k, y: (y - y0) * k, z: 0.5 })) }],
+      // Rounded to 1/100 px: invisible, and it keeps the deck file much smaller than full float precision.
+      segments: [{ type: 'free', points: pts.map(([x, y]) => ({ x: Math.round((x - x0) * k * 100) / 100, y: Math.round((y - y0) * k * 100) / 100, z: 0.5 })) }],
     },
   }
 }

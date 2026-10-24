@@ -1,7 +1,7 @@
 // Stepboard Player page: open a .stepboard.json deck and present it. No editor involved.
 // A deck can also be opened from the same server with ?deck=lecture-1.stepboard.json
 import 'reveal.js/dist/reveal.css'
-import { present, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
+import { present, assetsFromDeck, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
 import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 
 const style = document.createElement('style')
@@ -11,6 +11,7 @@ document.head.append(style)
 const $ = (id) => document.getElementById(id)
 $('file').accept = DECK_FILE_ACCEPT
 let slides = null
+let assets = {}
 let title = ''
 
 function show(deck, source) {
@@ -24,6 +25,7 @@ function show(deck, source) {
     return
   }
   slides = deck.slides.map((s) => ({ layers: s.layers || [] }))
+  assets = assetsFromDeck(deck)
   title = deck.name || 'Untitled deck'
   const builds = slides.reduce((n, s) => n + new Set(s.layers.filter((l) => l.in > 0).map((l) => l.in)).size, 0)
   const missing = slides.filter((s) => !s.layers.length).length
@@ -59,7 +61,7 @@ $('present').addEventListener('click', () => {
   present(stage, slides, 0, () => {
     stage.hidden = true
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
-  })
+  }, assets)
 })
 
 const param = new URLSearchParams(location.search).get('deck')

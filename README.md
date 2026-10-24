@@ -5,7 +5,8 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 
 ## Files
 - `src/model.js`     step model (pure functions: visibility, layers, insert/merge/swap steps)
-- `src/render.js`    renders a slide into stacked SVG layers (same 1600x900 bounds, so they line up)
+- `src/render.js`    renders a slide into stacked layers: SVG for strokes/text/shapes (same 1600x900 bounds, so they
+  line up) and separate image layers that point at the image stored once in the tldraw document
 - `src/player.js`    reveal.js player: builds on left/right, slides on up/down, remembers each slide's build state
 - `src/export.js`    standalone HTML export: the whole deck, the player and reveal.js inlined (works offline);
   Open file in the editor or player reads the deck back out of it (`src/deckfile.js`)
@@ -24,7 +25,8 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 ```
 { format: "stepboard-deck", version: 1, name, savedAt, slide: {width, height},
   tldraw: <tldraw document snapshot>,                 // the editable source of truth
-  slides: [{ pageId, name, layers: [{ in, out?, svg }] }] }  // cached render for the player
+  slides: [{ pageId, name, layers: [{ in, out?, svg } | { in, out?, image: { asset, x, y, w, h, rot, crop?, flipX?, flipY?, opacity? } }] }] }
+// layers are the cached render for the player; image layers reference tldraw asset records in `tldraw.store`
 ```
 
 ## Build
