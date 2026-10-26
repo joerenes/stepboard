@@ -91,6 +91,8 @@ button.danger { color: var(--minus); border-color: var(--minus); }
 .sb-canvas { position: relative; min-width: 0; min-height: 0; }
 /* No halo around text on the board (tldraw's default), to match the exported slides. */
 .sb-canvas .tl-container { --tl-text-outline: none; }
+/* The 'draw' font slot is mapped to Source Sans (see src/fonts.js), so its button would duplicate 'sans'. */
+.sb-canvas [data-testid="style.font.draw"] { display: none; }
 .sb-canvas > .tl-container, .sb-canvas > div:first-child { position: absolute; inset: 0; }
 .sb-slide-frame {
   position: absolute; left: 0; top: 0; pointer-events: none; border: 2px solid var(--frame); border-radius: 2px;

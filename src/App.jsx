@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  Tldraw, atom, useValue, getSnapshot, loadSnapshot, PageRecordType, getIndexBetween,
+  Tldraw, atom, useValue, DefaultFontStyle, getSnapshot, loadSnapshot, PageRecordType, getIndexBetween,
   DefaultToolbar, DefaultToolbarContent, TldrawUiMenuItem, useTools, useIsToolSelected,
 } from 'tldraw'
 import { LassoTool, LassoOverlay, LassoIcon } from './lasso.jsx'
@@ -19,12 +19,16 @@ import { standaloneHtml } from './export.js'
 import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 import { buildFromImport, IMPORT_FORMAT } from './importer.js'
 import { appendDeck } from './append.js'
+import { fontUrls, FONTS, withoutStaleText } from './fonts.js'
 import { loadDeck, saveDeck } from './storage.js'
 import { stepsAtom, viewAtom, stepOf, setStep, topShapes, selectStepItems } from './state.js'
 import { BuildMapOverlay } from './buildmap.jsx'
 
-const assetUrls = getAssetUrls({ baseUrl: './assets' })
+const assetUrls = { ...getAssetUrls({ baseUrl: './assets' }), fonts: fontUrls('./assets/fonts') }
 const FORMAT = 'stepboard-deck'
+// The handwriting font slot shows Source Sans too and is hidden from the style panel (src/fonts.js); new text,
+// sticky notes and labels start in sans.
+DefaultFontStyle.setDefaultValue('sans')
 
 // Shared state (current step per slide, board view) lives in state.js.
 
@@ -380,7 +384,7 @@ function App() {
   const deckObject = useCallback((ed) => {
     const pages = ed.getPages()
     return {
-      format: FORMAT, version: 1, name: nameRef.current, savedAt: new Date().toISOString(),
+      format: FORMAT, version: 1, name: nameRef.current, savedAt: new Date().toISOString(), fonts: FONTS,
       slide: { width: SLIDE_W, height: SLIDE_H },
       tldraw: getSnapshot(ed.store).document,
       slides: pages.map((p) => ({ pageId: p.id, name: p.name, layers: cacheRef.current[p.id] || [] })),
@@ -449,7 +453,7 @@ function App() {
       if (deck?.format === FORMAT && deck.tldraw) {
         try {
           loadSnapshot(ed.store, { document: deck.tldraw })
-          cacheRef.current = Object.fromEntries((deck.slides || []).map((s) => [s.pageId, s.layers]))
+          cacheRef.current = withoutStaleText(deck, Object.fromEntries((deck.slides || []).map((s) => [s.pageId, s.layers])))
           setCache(cacheRef.current)
           setName(deck.name || 'Untitled deck')
           setStatus(`Opened from this browser · saved ${fmtTime(new Date(deck.savedAt))}`)
@@ -535,7 +539,7 @@ function App() {
     try {
       loaded.current = false
       loadSnapshot(editor.store, { document: deck.tldraw })
-      cacheRef.current = Object.fromEntries((deck.slides || []).map((s) => [s.pageId, s.layers]))
+      cacheRef.current = withoutStaleText(deck, Object.fromEntries((deck.slides || []).map((s) => [s.pageId, s.layers])))
       setCache(cacheRef.current)
       stepsAtom.set({})
       setName(deck.name || 'Untitled deck')
@@ -563,7 +567,7 @@ function App() {
       } else {
         const r = appendDeck(editor, deck)
         pageIds = r.pageIds
-        cacheRef.current = { ...cacheRef.current, ...r.cache }
+        cacheRef.current = { ...cacheRef.current, ...withoutStaleText(deck, r.cache) }
         setCache(cacheRef.current)
       }
       loaded.current = true

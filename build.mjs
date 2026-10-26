@@ -30,9 +30,16 @@ const pl = await build({ ...common, entryPoints: ['src/present.js'], define: def
 const playerHtml = readFileSync('src/present.template.html', 'utf8')
   .replace('/*VENDOR_CSS*/', () => pick(pl, '.css')).replace('/*BUNDLE*/', () => scriptSafe(pick(pl, '.js')))
 
-// tldraw's fonts, icons and translations, served next to the page.
+// tldraw's icons and translations, served next to the page.
 const a = 'node_modules/@tldraw/assets'
-for (const d of ['fonts', 'translations', 'embed-icons']) cpSync(`${a}/${d}`, `dist/assets/${d}`, { recursive: true })
+for (const d of ['translations', 'embed-icons']) cpSync(`${a}/${d}`, `dist/assets/${d}`, { recursive: true })
+// Text fonts: Adobe's Source family (SIL Open Font License) instead of tldraw's IBM Plex and Shantell Sans.
+// The file names here must match FONT_FILES in src/fonts.js.
+mkdirSync('dist/assets/fonts', { recursive: true })
+for (const [pkg, base] of [['source-sans', 'SourceSans3'], ['source-serif', 'SourceSerif4'], ['source-code-pro', 'SourceCodePro']]) {
+  for (const v of ['Regular', 'It', 'Bold', 'BoldIt']) cpSync(`node_modules/${pkg}/WOFF2/TTF/${base}-${v}.ttf.woff2`, `dist/assets/fonts/${base}-${v}.woff2`)
+  cpSync(`node_modules/${pkg}/LICENSE.md`, `dist/assets/fonts/${base}-LICENSE.md`)
+}
 mkdirSync('dist/assets/icons/icon', { recursive: true })
 cpSync(`${a}/icons/icon/0_merged.svg`, 'dist/assets/icons/icon/0_merged.svg')
 
