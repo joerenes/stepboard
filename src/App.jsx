@@ -18,6 +18,7 @@ import { present, layerPicture, PLAYER_CSS, PLAYER_UI_CSS } from './player.js'
 import { standaloneHtml } from './export.js'
 import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 import { buildFromImport, IMPORT_FORMAT } from './importer.js'
+import { appendDeck } from './append.js'
 import { loadDeck, saveDeck } from './storage.js'
 import { stepsAtom, viewAtom, stepOf, setStep, topShapes, selectStepItems } from './state.js'
 import { BuildMapOverlay } from './buildmap.jsx'
@@ -213,7 +214,7 @@ function Thumb({ layers, assets }) {
   return <div className="sb-thumb" dangerouslySetInnerHTML={{ __html: html }} />
 }
 
-function Sidebar({ editor, cache }) {
+function Sidebar({ editor, cache, onAddFromFile }) {
   const pages = useValue('pages', () => editor.getPages(), [editor])
   const currentId = useValue('page', () => editor.getCurrentPageId(), [editor])
   const step = useValue('step', () => stepOf(editor), [editor])
@@ -270,6 +271,7 @@ function Sidebar({ editor, cache }) {
         <div className="sb-row">
           <button type="button" onClick={addSlide}>Add</button>
           <button type="button" onClick={duplicate}>Duplicate</button>
+          <button type="button" onClick={onAddFromFile} title="Add the slides of another deck or converted Keynote file after the last slide">From file</button>
           <button type="button" onClick={() => move(-1)} disabled={idx === 0} aria-label="Move slide up">↑</button>
           <button type="button" onClick={() => move(1)} disabled={idx === pages.length - 1} aria-label="Move slide down">↓</button>
           <button type="button" className={confirmDelete ? 'danger' : ''} onClick={remove} disabled={pages.length < 2}>{confirmDelete ? 'Confirm' : 'Delete'}</button>
@@ -321,14 +323,19 @@ function TextDialog({ data, onClose }) {
   )
 }
 
-function ImportDialog({ onFile, onClose }) {
+function ImportDialog({ mode = 'open', onFile, onClose }) {
   const ref = useRef(null)
   const [err, setErr] = useState('')
   useEffect(() => { ref.current?.showModal() }, [])
   return (
     <dialog ref={ref} className="sb-dialog" onClose={onClose}>
-      <h2>Open a deck file</h2>
-      <p>Choose a Stepboard deck (.stepboard.json), a presentation made with Export HTML (.html), or a converted Keynote file (.stepboard-import.json). Opening a file replaces the deck stored in this browser, so save a copy of the current deck first if you want to keep it.</p>
+      {mode === 'append' ? <>
+        <h2>Add slides from a file</h2>
+        <p>Choose a Stepboard deck (.stepboard.json), a presentation made with Export HTML (.html), or a converted Keynote file (.stepboard-import.json). All its slides are added after the last slide of this deck; delete or edit the ones you don't need afterwards.</p>
+      </> : <>
+        <h2>Open a deck file</h2>
+        <p>Choose a Stepboard deck (.stepboard.json), a presentation made with Export HTML (.html), or a converted Keynote file (.stepboard-import.json). Opening a file replaces the deck stored in this browser, so save a copy of the current deck first if you want to keep it. To add its slides to this deck instead, use <b>From file</b> under Slides.</p>
+      </>}
       <input id="import-file" type="file" accept={DECK_FILE_ACCEPT} onChange={async (e) => {
         const f = e.target.files?.[0]
         if (!f) return
@@ -542,6 +549,37 @@ function App() {
     }
   }
 
+  // Add the slides of another file after the last slide; the open deck keeps its name and everything else.
+  const appendFile = async (file) => {
+    let deck
+    try { deck = parseDeckText(await file.text()) } catch (e) { return e.message }
+    const isImport = deck?.format === IMPORT_FORMAT
+    if (!isImport && (deck?.format !== FORMAT || !deck.tldraw)) return 'That file is not a Stepboard deck or a converted Keynote file.'
+    try {
+      loaded.current = false
+      let pageIds
+      if (isImport) {
+        pageIds = buildFromImport(editor, deck, { append: true }).pageIds
+      } else {
+        const r = appendDeck(editor, deck)
+        pageIds = r.pageIds
+        cacheRef.current = { ...cacheRef.current, ...r.cache }
+        setCache(cacheRef.current)
+      }
+      loaded.current = true
+      if (pageIds.length) editor.setCurrentPage(pageIds[0])
+      editor.zoomToBounds(SLIDE_BOX, { inset: 24, immediate: true })
+      await flush(editor, isImport ? pageIds : pendingPages(editor))
+      const summary = `Added ${pageIds.length} slide${pageIds.length === 1 ? '' : 's'} from ${file.name}`
+      setStatus(summary)
+      setTimeout(() => setStatus(summary), 1500) // after the save that the new pages trigger
+      return ''
+    } catch (e) {
+      loaded.current = true
+      return `The slides could not be added (${e?.message || 'unknown error'}).`
+    }
+  }
+
   return (
     <div className={sidebar ? 'sb-app with-sidebar' : 'sb-app'}>
       <header className="sb-header">
@@ -549,7 +587,7 @@ function App() {
         <input id="deck-name" className="sb-name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Deck name" />
         <span className="sb-status" role="status">{status}</span>
         <div className="sb-actions">
-          <button type="button" onClick={() => setImporting(true)} disabled={!editor}>Open file</button>
+          <button type="button" onClick={() => setImporting('open')} disabled={!editor}>Open file</button>
           <button type="button" onClick={saveFile} disabled={!editor}>Save file</button>
           <button type="button" onClick={exportHtml} disabled={!editor}>Export HTML</button>
           <button type="button" className="primary" onClick={startPresenting} disabled={!editor}>Present</button>
@@ -557,7 +595,7 @@ function App() {
       </header>
       {editor && <StepBar editor={editor} />}
       <div className="sb-body">
-        {editor && sidebar && <div id="sb-sidebar"><Sidebar editor={editor} cache={cache} /></div>}
+        {editor && sidebar && <div id="sb-sidebar"><Sidebar editor={editor} cache={cache} onAddFromFile={() => setImporting('append')} /></div>}
         <div className="sb-canvas">
           <Tldraw
             assetUrls={assetUrls}
@@ -572,7 +610,7 @@ function App() {
       </div>
       {presenting && <div className="sb-player" ref={playerRef} />}
       {textFile && <TextDialog data={textFile} onClose={() => setTextFile(null)} />}
-      {importing && <ImportDialog onFile={importFile} onClose={() => setImporting(false)} />}
+      {importing && <ImportDialog mode={importing} onFile={importing === 'append' ? appendFile : importFile} onClose={() => setImporting(false)} />}
       <style>{PLAYER_CSS + PLAYER_UI_CSS}</style>
     </div>
   )

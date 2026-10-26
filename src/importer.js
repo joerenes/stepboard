@@ -1,6 +1,6 @@
 // Builds a Stepboard deck from a "stepboard-import" file (made by tools/key2stepboard.py from a Keynote file).
 // Shapes are created through the tldraw editor, so the result is an ordinary, fully editable deck.
-import { PageRecordType, AssetRecordType, createShapeId, toRichText } from 'tldraw'
+import { PageRecordType, AssetRecordType, createShapeId, toRichText, getIndexAbove } from 'tldraw'
 import { SLIDE_W, SLIDE_H } from './model.js'
 
 export const IMPORT_FORMAT = 'stepboard-import'
@@ -105,11 +105,15 @@ function colourBox(x, y, w, h, assetId, pageId, meta, locked = false) {
   }
 }
 
-/** Replace the editor's document with the imported slides. Returns a short summary. */
-export function buildFromImport(editor, data) {
+/**
+ * Build the imported slides: replacing the editor's document, or with { append: true } after its last slide.
+ * Returns a short summary, including the ids of the new slides.
+ */
+export function buildFromImport(editor, data, { append = false } = {}) {
   if (data?.format !== IMPORT_FORMAT || !Array.isArray(data.slides)) throw new Error('not a Stepboard import file')
   const k = SLIDE_W / (data.slide?.width || 1920)
-  const oldPages = editor.getPages().map((p) => p.id)
+  const oldPages = append ? [] : editor.getPages().map((p) => p.id)
+  let index = append ? editor.getPages().at(-1)?.index : null
   const newPages = []
   let strokes = 0, texts = 0, images = 0
 
@@ -135,7 +139,8 @@ export function buildFromImport(editor, data) {
 
     data.slides.forEach((slide, i) => {
       const pageId = PageRecordType.createId()
-      editor.createPage({ id: pageId, name: slide.name || `Slide ${i + 1}` })
+      if (append) index = getIndexAbove(index)
+      editor.createPage({ id: pageId, name: slide.name || `Slide ${i + 1}`, ...(append ? { index } : {}) })
       newPages.push(pageId)
       const shapes = []
       if (slide.background && !isWhite(slide.background)) {
@@ -169,5 +174,5 @@ export function buildFromImport(editor, data) {
     for (const id of oldPages) editor.deletePage(id)
   })
   editor.selectNone()
-  return { slides: newPages.length, strokes, texts, images, warnings: data.warnings || [] }
+  return { slides: newPages.length, pageIds: newPages, strokes, texts, images, warnings: data.warnings || [] }
 }

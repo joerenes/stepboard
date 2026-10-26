@@ -44,6 +44,8 @@ Share > Add to Home Screen: the manifest makes it open full screen as its own ap
 Test locally: `cd dist && python3 -m http.server 8000`, then `http://localhost:8000/` (or `http://<computer-IP>:8000/`
 from the iPad; over plain HTTP the clipboard may be refused).
 Browser storage is per address: use Save file / Open file to move a deck between addresses.
+To combine decks, use From file under Slides: it adds all slides of another deck file, exported `.html` or converted
+Keynote file after the last slide (the open deck keeps its name); delete or edit the ones you don't need.
 
 Pinned: tldraw 3.15.6, @tldraw/assets 3.15.6, react 18.3.1, reveal.js 5.1.0. Do not upgrade tldraw past 3.x.
 
@@ -73,7 +75,8 @@ the top of the script and keeps them in its own cached environment):
 uv run tools/key2stepboard.py lecture.key       # writes lecture.stepboard-import.json
 ```
 Without uv: `pip install -r tools/requirements.txt`, then `python3 tools/key2stepboard.py lecture.key`.
-Then in Stepboard: Open file, choose `lecture.stepboard-import.json`. This replaces the deck in the browser.
+Then in Stepboard: Open file, choose `lecture.stepboard-import.json`. This replaces the deck in the browser
+(or use From file under Slides to add the converted slides to the open deck).
 
 Converted: slides in order (skipped slides only with `--include-skipped`); pencil drawings as editable strokes with
 their width (colours go to the nearest tldraw colour, the exact one is kept in each shape's `meta.sourceColor`);
