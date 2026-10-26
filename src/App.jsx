@@ -19,13 +19,13 @@ import { standaloneHtml } from './export.js'
 import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 import { buildFromImport, IMPORT_FORMAT } from './importer.js'
 import { loadDeck, saveDeck } from './storage.js'
+import { stepsAtom, viewAtom, stepOf, setStep, topShapes, selectStepItems } from './state.js'
+import { BuildMapOverlay } from './buildmap.jsx'
 
 const assetUrls = getAssetUrls({ baseUrl: './assets' })
 const FORMAT = 'stepboard-deck'
 
-// ---------- shared reactive state ----------
-const stepsAtom = atom('steps', {})         // pageId -> current step
-const viewAtom = atom('view', 'ghost')       // 'ghost' | 'audience' | 'all'
+// Shared state (current step per slide, board view) lives in state.js.
 
 // Pen width: a multiplier on tldraw's stroke width for new pen strokes, stored per shape in props.scale
 // (the same prop tldraw's "dynamic size" uses), so it survives saving, export and presenting.
@@ -36,8 +36,6 @@ const setPenWidth = (v) => { penWidthAtom.set(v); try { localStorage.setItem('st
 const isFreshStroke = (shape) => (shape.type === 'draw' || shape.type === 'highlight') && !shape.props?.isComplete &&
   shape.props?.segments?.length === 1 && shape.props.segments[0].points?.length === 1
 
-const stepOf = (editor, pageId = editor.getCurrentPageId()) => stepsAtom.get()[pageId] ?? 0
-const setStep = (pageId, s) => stepsAtom.update((m) => ({ ...m, [pageId]: Math.max(0, s) }))
 
 // Audience view hides what the audience would not see at the current step.
 function getShapeVisibility(shape, editor) {
@@ -56,7 +54,7 @@ function OnTheCanvas() {
 }
 
 function OnTheCanvasAll() {
-  return <><OnTheCanvas /><LassoOverlay /></>
+  return <><OnTheCanvas /><BuildMapOverlay /><LassoOverlay /></>
 }
 
 // Toolbar: the lasso comes first, then tldraw's usual tools.
@@ -95,9 +93,6 @@ function GhostStyle({ editor }) {
 }
 
 // ---------- helpers ----------
-function topShapes(editor, pageId = editor.getCurrentPageId()) {
-  return editor.getSortedChildIdsForParent(pageId).map((id) => editor.getShape(id)).filter(Boolean)
-}
 
 function updateMeta(editor, shapes, fn) {
   const partials = []
@@ -167,12 +162,7 @@ function StepBar({ editor }) {
     s.type === 'group' ? editor.getSortedChildIdsForParent(s.id).map((id) => editor.getShape(id)) : [s]
   ).filter((s) => s && (s.type === 'draw' || s.type === 'highlight')), [editor])
   const reweight = (f) => editor.updateShapes(strokes.map((s) => ({ id: s.id, type: s.type, props: { scale: Math.max(0.05, s.props.scale * f) } })))
-  const selectStep = () => {
-    const ids = topShapes(editor).filter((s) => inOf(s) === step).map((s) => s.id)
-    editor.setCurrentTool('select')
-    editor.setSelectedShapes(ids)
-    if (!ids.length) setMsg(`Nothing appears at step ${step}`)
-  }
+  const selectStep = () => { if (!selectStepItems(editor, step)) setMsg(`Nothing appears at step ${step}`) }
 
   return (
     <div className="sb-stepbar">
@@ -185,7 +175,7 @@ function StepBar({ editor }) {
       </div>
 
       <div className="sb-seg" role="radiogroup" aria-label="Board view">
-        {[['ghost', 'Ghost'], ['audience', 'Audience'], ['all', 'All']].map(([v, label]) => (
+        {[['ghost', 'Ghost'], ['audience', 'Audience'], ['all', 'All'], ['map', 'Map']].map(([v, label]) => (
           <button key={v} type="button" role="radio" aria-checked={view === v} className={view === v ? 'on' : ''} onClick={() => viewAtom.set(v)}>{label}</button>
         ))}
       </div>
@@ -291,7 +281,7 @@ function Sidebar({ editor, cache }) {
         <ol>
           {rows.map((r) => (
             <li key={r.step}>
-              <button type="button" className={r.step === step ? 'sb-steprow on' : 'sb-steprow'} onClick={() => setStep(currentId, r.step)}>
+              <button type="button" className={r.step === step ? 'sb-steprow on' : 'sb-steprow'} onClick={() => selectStepItems(editor, r.step)} title="Go to this build and select what it shows">
                 <span>{r.step === 0 ? 'Start' : `Step ${r.step}`}</span>
                 <span className="sb-counts">
                   {r.appear > 0 && <span className="plus">+{r.appear}</span>}

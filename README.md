@@ -17,6 +17,8 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 - `src/storage.js`   IndexedDB storage of the deck (browser only, for now)
 - `src/App.jsx`      editor UI
 - `src/lasso.jsx`    lasso select tool (custom tldraw tool via public API)
+- `src/buildmap.jsx` Map view: boxes around each build's clusters of objects, numbered; tap a number to select
+- `src/state.js`     editor state shared by components (current step per slide, board view, select a step's objects)
 - `static/`          web app manifest and home-screen icons for the hosted site
 - `src/index.template.html`  page chrome and styles
 - `LICENSES/tldraw-3.15.6-LICENSE.md`  verbatim tldraw license shipped with 3.15.6 (keep with any distribution)

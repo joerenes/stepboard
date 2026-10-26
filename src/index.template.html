@@ -96,6 +96,13 @@ button.danger { color: var(--minus); border-color: var(--minus); }
   position: absolute; left: 0; top: 0; pointer-events: none; border: 2px solid var(--frame); border-radius: 2px;
   box-shadow: 0 0 0 100000px rgb(120 130 125 / .08);
 }
+/* Build map (Map view): a box around each cluster of a build, with its number in a corner. */
+.sb-map { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.sb-map-box { position: absolute; border-style: solid; pointer-events: none; box-sizing: border-box; }
+.sb-map-box.out { border-style: dashed; }
+.sb-map-badge { position: absolute; transform: translateY(-100%); pointer-events: auto; cursor: pointer; border: 0; color: #fff;
+  font-family: var(--font-data); font-weight: 500; line-height: 1.2; min-height: 0; white-space: nowrap; }
+.sb-map-box.out .sb-map-badge { opacity: .85; }
 .sb-lasso { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .sb-lasso path { fill: rgb(47 111 143 / .08); stroke: var(--frame); stroke-width: 1.5; stroke-dasharray: 6 5; vector-effect: non-scaling-stroke; }
 .sb-lasso-icon { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
