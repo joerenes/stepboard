@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "esbuild": "0.24.2",
+    "mathjax-full": "3.2.2",
     "source-code-pro": "2.42.0",
     "source-sans": "3.52.0",
     "source-serif": "4.5.1"

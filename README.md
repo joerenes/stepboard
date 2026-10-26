@@ -22,6 +22,10 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 - `static/`          web app manifest and home-screen icons for the hosted site
 - `src/index.template.html`  page chrome and styles
 - `LICENSES/tldraw-3.15.6-LICENSE.md`  verbatim tldraw license shipped with 3.15.6 (keep with any distribution)
+- `src/formula.jsx` + `src/mathjax-entry.js`  formula shape: LaTeX source typeset by MathJax 3.2.2 (TeX input, SVG
+  output, Computer Modern; Apache 2.0) into an SVG stored with the shape. The Σ button adds one; double-click or
+  Enter edits it. MathJax is built into `dist/assets/mathjax.js` (1.7 MB) and loaded only when a formula is edited;
+  the player and exported files only use the stored SVG.
 - `src/fonts.js`  text fonts: Source Sans 3, Source Serif 4 and Source Code Pro (Adobe, SIL Open Font License;
   npm packages source-sans, source-serif, source-code-pro). The build copies them with their licenses to
   `dist/assets/fonts/`. tldraw's handwriting font slot also uses Source Sans and is hidden from the style panel.

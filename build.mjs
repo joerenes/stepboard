@@ -30,6 +30,12 @@ const pl = await build({ ...common, entryPoints: ['src/present.js'], define: def
 const playerHtml = readFileSync('src/present.template.html', 'utf8')
   .replace('/*VENDOR_CSS*/', () => pick(pl, '.css')).replace('/*BUNDLE*/', () => scriptSafe(pick(pl, '.js')))
 
+// MathJax (TeX → SVG) for formula shapes, loaded by the editor when a formula is first edited.
+const mj = await build({ ...common, entryPoints: ['src/mathjax-entry.js'], define: define() })
+mkdirSync('dist/assets', { recursive: true })
+writeFileSync('dist/assets/mathjax.js', pick(mj, '.js'))
+cpSync('node_modules/mathjax-full/LICENSE', 'dist/assets/MATHJAX-LICENSE.txt')
+
 // tldraw's icons and translations, served next to the page.
 const a = 'node_modules/@tldraw/assets'
 for (const d of ['translations', 'embed-icons']) cpSync(`${a}/${d}`, `dist/assets/${d}`, { recursive: true })

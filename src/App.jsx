@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Tldraw, atom, useValue, DefaultFontStyle, getSnapshot, loadSnapshot, PageRecordType, getIndexBetween,
-  DefaultToolbar, DefaultToolbarContent, TldrawUiMenuItem, useTools, useIsToolSelected,
+  DefaultToolbar, TldrawUiMenuItem,
+  SelectToolbarItem, HandToolbarItem, DrawToolbarItem, EraserToolbarItem, TextToolbarItem, ArrowToolbarItem, NoteToolbarItem, AssetToolbarItem, RectangleToolbarItem, EllipseToolbarItem, TriangleToolbarItem, DiamondToolbarItem, HexagonToolbarItem, OvalToolbarItem, RhombusToolbarItem, StarToolbarItem, CloudToolbarItem, HeartToolbarItem, XBoxToolbarItem, CheckBoxToolbarItem, ArrowLeftToolbarItem, ArrowUpToolbarItem, ArrowDownToolbarItem, ArrowRightToolbarItem, LineToolbarItem, HighlightToolbarItem, LaserToolbarItem, FrameToolbarItem, useTools, useIsToolSelected,
 } from 'tldraw'
 import { LassoTool, LassoOverlay, LassoIcon } from './lasso.jsx'
 import { getAssetUrls } from '@tldraw/assets/selfHosted'
@@ -19,6 +20,7 @@ import { standaloneHtml } from './export.js'
 import { parseDeckText, DECK_FILE_ACCEPT } from './deckfile.js'
 import { buildFromImport, IMPORT_FORMAT } from './importer.js'
 import { appendDeck } from './append.js'
+import { FormulaShapeUtil, FormulaDialog, FormulaIcon, formulaEditAtom, watchFormulaEditing } from './formula.jsx'
 import { fontUrls, FONTS, withoutStaleText } from './fonts.js'
 import { loadDeck, saveDeck } from './storage.js'
 import { stepsAtom, viewAtom, stepOf, setStep, topShapes, selectStepItems } from './state.js'
@@ -62,14 +64,17 @@ function OnTheCanvasAll() {
   return <><OnTheCanvas /><BuildMapOverlay /><LassoOverlay /></>
 }
 
-// Toolbar: the lasso comes first, then tldraw's usual tools.
+// Toolbar: the lasso first, then tldraw's usual tools with the formula button next to text (tldraw's order
+// otherwise, so the shapes it moves into the overflow menu are the same ones).
 function Toolbar(props) {
   const tools = useTools()
   const lassoSelected = useIsToolSelected(tools.lasso)
   return (
     <DefaultToolbar {...props}>
       <TldrawUiMenuItem {...tools.lasso} isSelected={lassoSelected} />
-      <DefaultToolbarContent />
+      <SelectToolbarItem /><HandToolbarItem /><DrawToolbarItem /><EraserToolbarItem /><TextToolbarItem />
+      <TldrawUiMenuItem {...tools.formula} isSelected={false} />
+      <ArrowToolbarItem /><NoteToolbarItem /><AssetToolbarItem /><RectangleToolbarItem /><EllipseToolbarItem /><TriangleToolbarItem /><DiamondToolbarItem /><HexagonToolbarItem /><OvalToolbarItem /><RhombusToolbarItem /><StarToolbarItem /><CloudToolbarItem /><HeartToolbarItem /><XBoxToolbarItem /><CheckBoxToolbarItem /><ArrowLeftToolbarItem /><ArrowUpToolbarItem /><ArrowDownToolbarItem /><ArrowRightToolbarItem /><LineToolbarItem /><HighlightToolbarItem /><LaserToolbarItem /><FrameToolbarItem />
     </DefaultToolbar>
   )
 }
@@ -77,11 +82,14 @@ function Toolbar(props) {
 const uiOverrides = {
   tools(editor, tools) {
     tools.lasso = { id: 'lasso', label: 'tool.lasso', icon: LassoIcon, onSelect: () => editor.setCurrentTool('lasso') }
+    // Not a canvas tool: opens the formula dialog; the new formula goes in the middle of the view.
+    tools.formula = { id: 'formula', label: 'tool.formula', icon: FormulaIcon, onSelect: () => formulaEditAtom.set({ id: null }) }
     return tools
   },
-  translations: { en: { 'tool.lasso': 'Lasso select' } },
+  translations: { en: { 'tool.lasso': 'Lasso select', 'tool.formula': 'Formula (LaTeX)' } },
 }
 const tldrawTools = [LassoTool]
+const shapeUtils = [FormulaShapeUtil]
 const tldrawComponents = { PageMenu: null, OnTheCanvas: OnTheCanvasAll, Toolbar }
 
 function GhostStyle({ editor }) {
@@ -420,6 +428,7 @@ function App() {
     setEditor(ed)
     window.__stepboardEditor = ed // for debugging from the browser console
     ed.user.updateUserPreferences({ colorScheme: 'system' })
+    watchFormulaEditing(ed)
 
     // Blackboard mode: anything new belongs to the current step.
     ed.sideEffects.registerBeforeCreateHandler('shape', (shape) => {
@@ -607,12 +616,14 @@ function App() {
             getShapeVisibility={getShapeVisibility}
             components={tldrawComponents}
             tools={tldrawTools}
+            shapeUtils={shapeUtils}
             overrides={uiOverrides}
           />
           <GhostStyle editor={editor} />
         </div>
       </div>
       {presenting && <div className="sb-player" ref={playerRef} />}
+      {editor && <FormulaDialog editor={editor} />}
       {textFile && <TextDialog data={textFile} onClose={() => setTextFile(null)} />}
       {importing && <ImportDialog mode={importing} onFile={importing === 'append' ? appendFile : importFile} onClose={() => setImporting(false)} />}
       <style>{PLAYER_CSS + PLAYER_UI_CSS}</style>
