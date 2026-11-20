@@ -14,6 +14,7 @@ build steps stored on each top-level shape as `meta.in` (appears at step) and `m
 - `src/present.js` + `src/present.template.html`  Stepboard Player page (present.html): open a deck file and present
 - `src/importer.js`  builds a deck from a converted Keynote file (see below)
 - `tools/key2stepboard.py`  Keynote → Stepboard converter (Python, runs on your computer)
+- `tools/nbn2stepboard.py`  Notability → Stepboard converter (Python standard library only)
 - `src/storage.js`   IndexedDB storage of the deck (browser only, for now)
 - `src/App.jsx`      editor UI
 - `src/lasso.jsx`    lasso select tool (custom tldraw tool via public API)
@@ -94,3 +95,17 @@ tldraw's named colours can't express them; backgrounds are locked); builds: In =
 Out = disappears; builds that start automatically join the previous step.
 Not converted yet: image cropping (the whole image is shown), other shapes, tables, charts, movies, background
 images and gradients, transitions, presenter notes. Crayon/brush texture comes out as a solid stroke.
+
+## Converting Notability notes
+A Notability note (`.nbn`, or the older `.note`) is a folder; give the converter the folder or a zip of it
+(Finder: Compress). It needs only Python's standard library:
+```
+uv run tools/nbn2stepboard.py "Lecture 3.nbn"                 # writes "Lecture 3.stepboard-import.json"
+uv run tools/nbn2stepboard.py "Lecture 3.zip" --builds lines  # strokes appear line by line, in writing order
+uv run tools/nbn2stepboard.py "Lecture 3.nbn" --pages         # one slide per paper page
+```
+By default the note is cut into 16:9 slides of the full page width, top to bottom, with each cut moved into the
+nearest empty space between lines of writing. Converted: pen strokes, pencil strokes (pressure becomes tldraw pen
+pressure; the grainy texture is not reproduced), highlighter strokes, colours (nearest tldraw colour, exact one in
+`meta.sourceColor`), typed text (one text box per paragraph on the note's text lines; with `--builds lines` it is
+visible from the start). Not converted yet: images, PDF pages, shapes, recordings.

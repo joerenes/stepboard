@@ -1,4 +1,5 @@
-// Builds a Stepboard deck from a "stepboard-import" file (made by tools/key2stepboard.py from a Keynote file).
+// Builds a Stepboard deck from a "stepboard-import" file (made by tools/key2stepboard.py from a Keynote file,
+// or tools/nbn2stepboard.py from a Notability note).
 // Shapes are created through the tldraw editor, so the result is an ordinary, fully editable deck.
 import { PageRecordType, AssetRecordType, createShapeId, toRichText, getIndexAbove } from 'tldraw'
 import { SLIDE_W, SLIDE_H } from './model.js'
@@ -45,19 +46,32 @@ function stepMeta(item) {
   return meta
 }
 
+const HIGHLIGHT_BASE = 18 * 1.12 // tldraw's "s" highlighter width
+
+// A stroke: tldraw draw shape, or a highlight shape for highlighter strokes (item.highlight). With
+// item.pressure (0..1 per point, e.g. Notability's pencil) it becomes a pen stroke whose width follows it.
 function strokeShape(item, k, pageId) {
   const pts = item.points || []
   if (!pts.length) return null
   const [x0, y0] = pts[0]
+  const pressure = Array.isArray(item.pressure) && item.pressure.length === pts.length ? item.pressure : null
+  // Rounded to 1/100 px: invisible, and it keeps the deck file much smaller than full float precision.
+  const points = pts.map(([x, y], i) => ({ x: Math.round((x - x0) * k * 100) / 100, y: Math.round((y - y0) * k * 100) / 100, z: pressure ? pressure[i] : 0.5 }))
+  const meta = { ...stepMeta(item), sourceColor: item.color, ...(item.brush ? { sourceBrush: item.brush } : {}) }
+  if (item.highlight) {
+    return {
+      id: createShapeId(), type: 'highlight', parentId: pageId, x: x0 * k, y: y0 * k, meta,
+      props: { color: nearestColor(item.color), size: 's', isPen: !!pressure, isComplete: true,
+        scale: Math.max(0.05, (item.width * k) / HIGHLIGHT_BASE), segments: [{ type: 'free', points }] },
+    }
+  }
   return {
-    id: createShapeId(), type: 'draw', parentId: pageId, x: x0 * k, y: y0 * k,
-    meta: { ...stepMeta(item), sourceColor: item.color, ...(item.brush ? { sourceBrush: item.brush } : {}) },
+    id: createShapeId(), type: 'draw', parentId: pageId, x: x0 * k, y: y0 * k, meta,
     props: {
       color: nearestColor(item.fill || item.color), size: 's', dash: 'solid', fill: item.fill ? 'fill' : 'none',
-      isPen: false, isComplete: true, isClosed: !!item.fill,
+      isPen: !!pressure, isComplete: true, isClosed: !!item.fill,
       scale: Math.max(0.05, (item.width * k) / STROKE_BASE),
-      // Rounded to 1/100 px: invisible, and it keeps the deck file much smaller than full float precision.
-      segments: [{ type: 'free', points: pts.map(([x, y]) => ({ x: Math.round((x - x0) * k * 100) / 100, y: Math.round((y - y0) * k * 100) / 100, z: 0.5 })) }],
+      segments: [{ type: 'free', points }],
     },
   }
 }
