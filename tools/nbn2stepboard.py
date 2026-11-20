@@ -9,7 +9,7 @@ nbn2stepboard: convert a Notability note into a Stepboard import file.
     uv run tools/nbn2stepboard.py "Lecture 3.nbn"            # writes "Lecture 3.stepboard-import.json"
     uv run tools/nbn2stepboard.py "Lecture 3.zip"            # the .nbn folder compressed in Finder
     uv run tools/nbn2stepboard.py "Lecture 3.nbn" --builds lines --pages
-    uv run tools/nbn2stepboard.py "Slides.nbn" --landscape           # each landscape page is a slide
+    uv run tools/nbn2stepboard.py "Slides.nbn" --turned              # written with the iPad turned sideways
     python3 tools/nbn2stepboard.py ...                       # also works: only the standard library is used
 
 A Notability note (.nbn, and the older .note) is a folder (or zip) holding Session.plist, a keyed archive
@@ -21,7 +21,9 @@ Slides
   width, top to bottom; each cut is moved up into the nearest empty band between lines of writing, so no
   line of writing is split. With --pages each paper page becomes one slide instead (the whole page fits
   the slide, centred). Landscape notes (paper orientation set to landscape in Notability) get one slide per
-  page by default; --landscape treats any note's pages as landscape, --bands forces 16:9 bands.
+  page by default; --landscape treats any note's paper as landscape, --bands forces 16:9 bands.
+  --turned is for pages written with the iPad held sideways on portrait paper (writing running up the page):
+  each page is turned upright and becomes one landscape slide (--turned ccw if the writing runs down).
 
 Builds (--builds)
   none   everything is visible from the start (default)
@@ -263,12 +265,36 @@ def group_builds(items):
     return steps
 
 
-def convert(path, builds='none', pages=None, landscape=None):
+def turn_pages(items, page_w, page_h, direction, warnings):
+    """Pages written with the iPad turned sideways: rotate each page a quarter turn (cw: clockwise) so the
+    writing reads normally, and stack the now-landscape pages again. Returns the new page width and height."""
+    def page_of(it):
+        return int(((it['_box'][1] + it['_box'][3]) / 2) // page_h)
+
+    def move(x, y, p):
+        y -= p * page_h
+        return ((page_h - y, x + p * page_w) if direction == 'cw' else (y, page_w - x + p * page_w))
+
+    for it in items:
+        p = page_of(it)
+        if it['type'] == 'stroke':
+            it['points'] = [(*move(x, y, p), f) for x, y, f in it['points']]
+            it['_box'] = bbox(it['points'])
+            w = it['width']
+            it['_ink'] = [v + d for v, d in zip(it['_box'], (-w, -w, w, w))]
+        else:
+            warnings.add('the direction of typed text on turned pages (it stays horizontal)')
+            it['x'], it['y'] = move(it['x'], it['y'], p)
+            it['_box'] = it['_ink'] = [it['x'], it['y'], it['x'] + 0.5 * it['fontSize'] * len(it['text']), it['y'] + 1.2 * it['fontSize']]
+    return page_h, page_w
+
+
+def convert(path, builds='none', pages=None, landscape=None, turned=None):
     arc = Archive(read_session(path))
     warnings = set()
     page_w, page_h, line, landscape = paper(arc, landscape)
-    if pages is None:  # landscape notes are usually slides already: one slide per page
-        pages = landscape
+    if pages is None:  # landscape pages are usually slides already: one slide per page
+        pages = landscape or bool(turned)
 
     items = []
     for c in read_curves(arc, warnings):
@@ -296,6 +322,9 @@ def convert(path, builds='none', pages=None, landscape=None):
               'fontSize': size, 'color': hex_rgb([v * 255 for v in rgba])}
         it['_box'] = it['_ink'] = [TEXT_LEFT, y, TEXT_LEFT + 0.5 * size * len(para), y + 1.2 * size]
         items.append(it)
+
+    if turned:
+        page_w, page_h = turn_pages(items, page_w, page_h, turned, warnings)
 
     for key in ('mediaObjects', 'pdfFiles'):
         for o in arc.find(key):
@@ -384,10 +413,14 @@ def main():
     ap.add_argument('--pages', action='store_true', default=None,
                     help='one slide per paper page instead of 16:9 bands (the default for landscape notes)')
     ap.add_argument('--bands', dest='pages', action='store_false', help='16:9 bands even for a landscape note')
+    ap.add_argument('--turned', nargs='?', const='cw', choices=['cw', 'ccw'],
+                    help='pages written with the iPad turned sideways: each page is turned a quarter turn, clockwise '
+                         '(cw, the default: writing that runs up the page) or counter-clockwise (ccw: writing that '
+                         'runs down the page), and becomes one landscape slide')
     ap.add_argument('--landscape', action='store_true', default=None,
-                    help="treat the pages as landscape, whatever the note's paper setting says (implies --pages)")
+                    help="treat the paper as landscape (not turned), whatever the note's setting says; implies --pages")
     args = ap.parse_args()
-    data = convert(args.note, args.builds, args.pages, args.landscape)
+    data = convert(args.note, args.builds, args.pages, args.landscape, args.turned)
     out = args.output or os.path.join(os.path.dirname(os.path.abspath(os.path.normpath(args.note))),
                                       note_name(args.note) + '.stepboard-import.json')
     with open(out, 'w') as f:

@@ -103,10 +103,12 @@ A Notability note (`.nbn`, or the older `.note`) is a folder; give the converter
 uv run tools/nbn2stepboard.py "Lecture 3.nbn"                 # writes "Lecture 3.stepboard-import.json"
 uv run tools/nbn2stepboard.py "Lecture 3.zip" --builds lines  # strokes appear line by line, in writing order
 uv run tools/nbn2stepboard.py "Lecture 3.nbn" --pages         # one slide per paper page
-uv run tools/nbn2stepboard.py "Slides.nbn" --landscape        # pages are landscape: one slide per page
+uv run tools/nbn2stepboard.py "Slides.nbn" --turned           # written with the iPad turned sideways
 ```
 Notes whose paper is set to landscape in Notability get one slide per page automatically (each page fits the
 16:9 slide, centred); `--landscape` does the same for any note, `--bands` forces the 16:9 cutting instead.
+For slides written on portrait paper with the iPad held sideways (writing running up the page), `--turned`
+turns each page upright and makes it one landscape slide (`--turned ccw` if the writing runs down the page).
 By default the note is cut into 16:9 slides of the full page width, top to bottom, with each cut moved into the
 nearest empty space between lines of writing. Converted: pen strokes, pencil strokes (pressure becomes tldraw pen
 pressure; the grainy texture is not reproduced), highlighter strokes, colours (nearest tldraw colour, exact one in
