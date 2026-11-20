@@ -9,6 +9,7 @@ nbn2stepboard: convert a Notability note into a Stepboard import file.
     uv run tools/nbn2stepboard.py "Lecture 3.nbn"            # writes "Lecture 3.stepboard-import.json"
     uv run tools/nbn2stepboard.py "Lecture 3.zip"            # the .nbn folder compressed in Finder
     uv run tools/nbn2stepboard.py "Lecture 3.nbn" --builds lines --pages
+    uv run tools/nbn2stepboard.py "Slides.nbn" --landscape           # each landscape page is a slide
     python3 tools/nbn2stepboard.py ...                       # also works: only the standard library is used
 
 A Notability note (.nbn, and the older .note) is a folder (or zip) holding Session.plist, a keyed archive
@@ -18,8 +19,9 @@ points themselves as cubic Bézier control points (1 + 3n per stroke) with a pre
 Slides
   A note is one long portrait page (or several). By default it is cut into 16:9 slides of the full page
   width, top to bottom; each cut is moved up into the nearest empty band between lines of writing, so no
-  line of writing is split. With --pages each paper page becomes one slide instead (the page is scaled to
-  the slide height and centred).
+  line of writing is split. With --pages each paper page becomes one slide instead (the whole page fits
+  the slide, centred). Landscape notes (paper orientation set to landscape in Notability) get one slide per
+  page by default; --landscape treats any note's pages as landscape, --bands forces 16:9 bands.
 
 Builds (--builds)
   none   everything is visible from the start (default)
@@ -44,7 +46,7 @@ import sys
 import zipfile
 
 FORMAT = 'stepboard-import'
-PAPER_RATIO = {'letter': 11 / 8.5, 'a4': 297 / 210, 'a5': 210 / 148, 'legal': 14 / 8.5}
+PAPER_INCHES = {'letter': (8.5, 11), 'a4': (210 / 25.4, 297 / 25.4), 'a5': (148 / 25.4, 210 / 25.4), 'legal': (8.5, 14)}
 DEFAULT_WIDTH = 716.8          # Notability's page width in document units on the iPad
 STYLE_PEN, STYLE_PENCIL = 3, 5
 # Typed text sits on the note's text lines. Measured from a Notability PDF export: the first line's
@@ -184,23 +186,27 @@ def read_text(arc):
     return out
 
 
-def paper(arc):
-    """(page width, page height, text line spacing) in document units."""
-    width, ratio, line = DEFAULT_WIDTH, PAPER_RATIO['letter'], None
+def paper(arc, landscape=None):
+    """(page width, page height, text line spacing, landscape) in document units. `landscape` overrides the
+    note's own paper orientation (True / False); None uses the note's."""
+    width, inches, spacing, orient = DEFAULT_WIDTH, PAPER_INCHES['letter'], None, 'portrait'
     for o in arc.find('paperSize'):
-        size = str(arc.get(o.get('paperSize'))).lower()
-        ratio = PAPER_RATIO.get(size, ratio)
-        sizing = str(arc.get(o.get('paperSizingBehavior')) or '')
-        m = re.search(r'lockedWidth:([\d.]+)', sizing)
-        if m:
-            width = float(m.group(1))
+        inches = PAPER_INCHES.get(str(arc.get(o.get('paperSize'))).lower(), inches)
+        orient = str(arc.get(o.get('paperOrientation')) or orient).lower()
         style = str(arc.get(o.get('lineStyle2')) or '')
         m = re.search(r':([\d.]+)$', style)
-        if m:  # line or dot spacing in inches; the page is 8.5 in wide on letter paper
-            line = float(m.group(1)) * width / 8.5
+        if m:  # line or dot spacing in inches
+            spacing = float(m.group(1))
+        m = re.search(r'lockedWidth:([\d.]+)', str(arc.get(o.get('paperSizingBehavior')) or ''))
+        if m:
+            width = float(m.group(1))
     for o in arc.find('pageWidthInDocumentCoordsKey'):
         width = float(o['pageWidthInDocumentCoordsKey']) or width
-    return width, width * ratio, line or 16.6
+    if landscape is None:
+        landscape = orient.startswith('landscape')
+    across, down = (inches[1], inches[0]) if landscape else inches
+    units_per_inch = width / across
+    return width, down * units_per_inch, (spacing * units_per_inch if spacing else 16.6), landscape
 
 
 # ---------------------------------------------------------------- turning it into slides
@@ -257,10 +263,12 @@ def group_builds(items):
     return steps
 
 
-def convert(path, builds='none', pages=False):
+def convert(path, builds='none', pages=None, landscape=None):
     arc = Archive(read_session(path))
     warnings = set()
-    page_w, page_h, line = paper(arc)
+    page_w, page_h, line, landscape = paper(arc, landscape)
+    if pages is None:  # landscape notes are usually slides already: one slide per page
+        pages = landscape
 
     items = []
     for c in read_curves(arc, warnings):
@@ -310,13 +318,16 @@ def convert(path, builds='none', pages=False):
     total_h = max(it['_ink'][3] for it in items)
     slides = []
     if pages:
+        # The page fits into the 16:9 slide: a portrait page or a landscape letter/A4 page fits its height
+        # (centred, with space at the sides); a page wider than 16:9 fits its width.
         slide_h = page_w * 9 / 16
-        k = slide_h / page_h
+        k = min(1.0, slide_h / page_h)
         dx = (page_w - page_w * k) / 2
+        dy = (slide_h - page_h * k) / 2
         for p in range(int(total_h // page_h) + 1):
             mine = [it for it in items if p * page_h <= (it['_box'][1] + it['_box'][3]) / 2 < (p + 1) * page_h]
             if mine:
-                slides.append(place(mine, p * page_h, k, dx, f'Page {p + 1}'))
+                slides.append(place(mine, p * page_h - dy / k, k, dx, f'Page {p + 1}'))
     else:
         tops, band = cut_bands([it['_ink'] for it in items], page_w, total_h)
         tops.append(math.inf)
@@ -370,9 +381,13 @@ def main():
     ap.add_argument('-o', '--output', help='output file (default: next to the input, .stepboard-import.json)')
     ap.add_argument('--builds', choices=['none', 'lines'], default='none',
                     help='none: all visible (default); lines: strokes appear in writing order, a line at a time')
-    ap.add_argument('--pages', action='store_true', help='one slide per paper page instead of 16:9 bands')
+    ap.add_argument('--pages', action='store_true', default=None,
+                    help='one slide per paper page instead of 16:9 bands (the default for landscape notes)')
+    ap.add_argument('--bands', dest='pages', action='store_false', help='16:9 bands even for a landscape note')
+    ap.add_argument('--landscape', action='store_true', default=None,
+                    help="treat the pages as landscape, whatever the note's paper setting says (implies --pages)")
     args = ap.parse_args()
-    data = convert(args.note, args.builds, args.pages)
+    data = convert(args.note, args.builds, args.pages, args.landscape)
     out = args.output or os.path.join(os.path.dirname(os.path.abspath(os.path.normpath(args.note))),
                                       note_name(args.note) + '.stepboard-import.json')
     with open(out, 'w') as f:
