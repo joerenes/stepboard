@@ -48,7 +48,9 @@ import sys
 import zipfile
 
 FORMAT = 'stepboard-import'
-PAPER_INCHES = {'letter': (8.5, 11), 'a4': (210 / 25.4, 297 / 25.4), 'a5': (148 / 25.4, 210 / 25.4), 'legal': (8.5, 14)}
+# Paper sizes (width, height) in inches. Notability's "letter" pages are a little taller than US letter: its PDF
+# export makes them 612 x 803.25 pt (8.5 x 11.16 in), and a 24-page note's page breaks confirm that height.
+PAPER_INCHES = {'letter': (8.5, 8.5 * 803.25 / 612), 'a4': (210 / 25.4, 297 / 25.4), 'a5': (148 / 25.4, 210 / 25.4), 'legal': (8.5, 14)}
 DEFAULT_WIDTH = 716.8          # Notability's page width in document units on the iPad
 STYLE_PEN, STYLE_PENCIL = 3, 5
 # Typed text sits on the note's text lines. Measured from a Notability PDF export: the first line's
